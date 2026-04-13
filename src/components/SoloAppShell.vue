@@ -12,6 +12,7 @@ const props = defineProps({
   stats: { type: Array, default: () => [] },
   navItems: { type: Array, default: () => [] },
   theme: String,
+  hideMainHeader: { type: Boolean, default: false },
 })
 
 const route = useRoute()
@@ -22,23 +23,23 @@ const themeMeta = computed(() => {
     return {
       label: '资深教师端',
       hint: '经验沉淀工作台',
-      visual: 'https://picsum.photos/seed/rural-senior-studio/1200/820',
       icon: NotebookPen,
+      checklist: ['今天完成 1 份教案草稿', '补充 1 条课堂反思记录', '整理本周案例素材'],
     }
   }
   if (props.theme === 'mid') {
     return {
       label: '骨干教师端',
       hint: '诊断研究工作台',
-      visual: 'https://picsum.photos/seed/rural-mid-lab/1200/820',
       icon: BrainCircuit,
+      checklist: ['处理 2 份错题样本', '完成 1 次数字助教脚本', '更新课题进展摘要'],
     }
   }
   return {
     label: '新任教师端',
     hint: '成长学习工作台',
-    visual: 'https://picsum.photos/seed/rural-novice-club/1200/820',
     icon: GraduationCap,
+    checklist: ['学习 1 条名师经验', '提交 1 条在线提问', '更新成长档案条目'],
   }
 })
 
@@ -115,7 +116,7 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
             <component :is="themeMeta.icon" :size="14" />
             {{ themeMeta.label }}
           </UiBadge>
-          <RouterLink to="/" class="app-sidebar-home social-home-link">
+          <RouterLink to="/" class="app-sidebar-home social-home-link desktop-only-inline">
             <ArrowLeft :size="16" />
             返回首页
           </RouterLink>
@@ -124,42 +125,59 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
     </header>
 
     <div class="app-main topbar-main">
-      <header class="app-header product-app-header social-app-header">
-        <div class="social-app-copy">
-          <div class="social-header-meta">
-            <UiBadge>
-              <component :is="getNavIcon(activeNav?.path || '')" :size="14" />
-              {{ activeNav?.name || themeMeta.label }}
-            </UiBadge>
-            <span v-if="activeNav" class="header-channel">{{ activeNav.path }}</span>
-          </div>
-          <h1>{{ title }}</h1>
-          <p v-if="subtitle" class="page-subtitle">{{ subtitle }}</p>
+      <main class="app-content topbar-content workspace-layout center-only-layout">
+        <aside class="workspace-leftbar desktop-only-side">
+          <slot name="left">
+            <div class="workspace-default-tools"></div>
+          </slot>
+        </aside>
 
-          <section v-if="stats.length" class="stats-ribbon" aria-label="页面概览">
-            <UiCard v-for="item in stats" :key="item.label" class="stat-pill-card">
-              <div class="stat-pill-top">
-                <span class="stat-pill-icon">
-                  <component :is="getStatIcon(item.label)" :size="16" />
-                </span>
-                <span>{{ item.label }}</span>
+        <section class="workspace-main">
+          <header v-if="!hideMainHeader" class="app-header product-app-header social-app-header">
+            <div class="social-app-copy">
+              <div class="social-header-meta">
+                <UiBadge>
+                  <component :is="getNavIcon(activeNav?.path || '')" :size="14" />
+                  {{ activeNav?.name || themeMeta.label }}
+                </UiBadge>
+                <span v-if="activeNav" class="header-channel">{{ activeNav.path }}</span>
               </div>
-              <strong>{{ item.value }}</strong>
+              <h1>{{ title }}</h1>
+              <p v-if="subtitle" class="page-subtitle">{{ subtitle }}</p>
+
+              <section v-if="stats.length" class="stats-ribbon" aria-label="页面概览">
+                <UiCard v-for="item in stats" :key="item.label" class="stat-pill-card">
+                  <div class="stat-pill-top">
+                    <span class="stat-pill-icon">
+                      <component :is="getStatIcon(item.label)" :size="16" />
+                    </span>
+                    <span>{{ item.label }}</span>
+                  </div>
+                  <strong>{{ item.value }}</strong>
+                </UiCard>
+              </section>
+            </div>
+          </header>
+
+          <slot />
+        </section>
+
+        <aside class="workspace-rightbar desktop-only-side">
+          <slot name="right">
+            <UiCard class="workspace-panel-card">
+              <div class="workspace-panel-head">
+                <strong>今日工作清单</strong>
+                <span class="header-channel">{{ themeMeta.hint }}</span>
+              </div>
+              <ul class="workspace-checklist">
+                <li v-for="item in themeMeta.checklist" :key="item">
+                  <span class="workspace-check"></span>
+                  <span>{{ item }}</span>
+                </li>
+              </ul>
             </UiCard>
-          </section>
-        </div>
-
-        <UiCard class="header-visual-card">
-          <img :src="themeMeta.visual" :alt="themeMeta.label" class="header-visual-image" />
-          <div>
-            <strong>{{ activeNav?.name || themeMeta.label }}</strong>
-            <p>{{ themeMeta.hint }}</p>
-          </div>
-        </UiCard>
-      </header>
-
-      <main class="app-content topbar-content">
-        <slot />
+          </slot>
+        </aside>
       </main>
     </div>
 

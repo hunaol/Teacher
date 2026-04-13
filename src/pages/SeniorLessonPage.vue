@@ -1,8 +1,9 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { FileText, Mic, MicOff, Save, Sparkles, SquarePen, Target } from 'lucide-vue-next'
+import { BookCopy, CheckCircle2, FilePenLine, ListTodo, Mic, MicOff, Save, Sparkles, StepForward } from 'lucide-vue-next'
 import SoloAppShell from '../components/SoloAppShell.vue'
 import UiButton from '../components/ui/UiButton.vue'
+import UiCard from '../components/ui/UiCard.vue'
 import UiProgress from '../components/ui/UiProgress.vue'
 import { seniorApp } from '../mock/platformData'
 import { useSpeechRecognition } from '../composables/useSpeechRecognition'
@@ -13,12 +14,14 @@ const { drafts: savedDrafts, buildDraftContent, addDraft, updateDraft } = useSen
 const voiceInput = ref(seniorApp.lesson.input)
 const generatedDraft = ref('')
 const generateProgress = ref(0)
-const currentStep = ref('等待语音输入')
+const generateStatus = ref('等待生成')
 const isGenerating = ref(false)
 
+const currentStage = ref(1)
 const selectedSavedId = ref(savedDrafts.value[0]?.id ?? null)
 const editableTitle = ref(savedDrafts.value[0]?.title ?? '')
 const editableContent = ref(savedDrafts.value[0]?.content ?? '')
+const markdownView = ref('edit')
 
 const recognition = useSpeechRecognition()
 
@@ -29,48 +32,37 @@ watch(
   },
 )
 
-watch(
-  () => savedDrafts.value,
-  (value) => {
-    if (!value.length) return
-    if (!selectedSavedId.value) {
-      selectSavedDraft(value[0])
-    }
-  },
-  { deep: true },
-)
+const selectedSavedDraft = computed(() => savedDrafts.value.find((item) => item.id === selectedSavedId.value) ?? null)
 
-const flowSteps = computed(() => [
+const workflow = computed(() => [
   {
     id: 1,
     title: '语音输入需求',
-    hint: '先说清学段、教学目标和本地情境。',
-    status: voiceInput.value.trim() ? 'done' : 'current',
+    hint: '先说学段、目标、本地案例与活动结构。',
+    done: !!voiceInput.value.trim(),
   },
   {
     id: 2,
     title: '生成结构化草稿',
-    hint: generatedDraft.value ? '已生成，请保存到第三部分。' : '生成后只能预览，不能在这里编辑。',
-    status: generatedDraft.value ? 'done' : 'current',
+    hint: '系统生成 Markdown 教案草稿。',
+    done: !!generatedDraft.value.trim(),
   },
   {
     id: 3,
-    title: '在版本区回看与编辑',
-    hint: '点击版本后在下方编辑并保存修改。',
-    status: selectedSavedId.value ? 'current' : 'waiting',
+    title: '编辑并保存',
+    hint: '在历史教案中查看、编辑并保存版本。',
+    done: !!selectedSavedDraft.value,
   },
 ])
 
-const selectedSavedDraft = computed(() => savedDrafts.value.find((item) => item.id === selectedSavedId.value) ?? null)
+const todoList = computed(() => [
+  { id: 't1', text: '录入本节课需求', done: !!voiceInput.value.trim() },
+  { id: 't2', text: '生成 Markdown 教案', done: !!generatedDraft.value.trim() },
+  { id: 't3', text: '保存到历史教案', done: !!selectedSavedDraft.value && !!generatedDraft.value.trim() },
+  { id: 't4', text: '完成一次版本编辑', done: editableContent.value !== (selectedSavedDraft.value?.content || '') },
+])
 
-const annotationGroups = computed(() => {
-  const annotations = selectedSavedDraft.value?.annotations || { goal: [], localCase: [], activity: [] }
-  return [
-    { key: 'goal', title: '教学目标', list: annotations.goal || [] },
-    { key: 'localCase', title: '本地案例', list: annotations.localCase || [] },
-    { key: 'activity', title: '活动设计', list: annotations.activity || [] },
-  ]
-})
+const navProgress = computed(() => Math.round((currentStage.value / 3) * 100))
 
 function toggleVoiceInput() {
   if (recognition.isListening.value) {
@@ -81,193 +73,272 @@ function toggleVoiceInput() {
   recognition.start()
 }
 
+function goStage(id) {
+  currentStage.value = id
+}
+
+function nextStage() {
+  if (currentStage.value < 3) currentStage.value += 1
+}
+
 function generateDraft() {
   isGenerating.value = true
-  generateProgress.value = 18
-  currentStep.value = '正在解析语音需求'
+  generateProgress.value = 16
+  generateStatus.value = '正在解析语音需求'
 
   window.setTimeout(() => {
-    generateProgress.value = 52
-    currentStep.value = '正在匹配教学目标/本地案例'
+    generateProgress.value = 44
+    generateStatus.value = '正在生成教学目标与评价标准'
   }, 320)
 
   window.setTimeout(() => {
-    generateProgress.value = 82
-    currentStep.value = '正在组织活动设计'
+    generateProgress.value = 72
+    generateStatus.value = '正在匹配本地案例与活动流程'
   }, 720)
 
   window.setTimeout(() => {
     generatedDraft.value = buildDraftContent(voiceInput.value)
     generateProgress.value = 100
-    currentStep.value = '生成完成：请保存到第三部分后再编辑'
+    generateStatus.value = '生成完成，可保存到历史教案并进入编辑'
     isGenerating.value = false
-  }, 1120)
+  }, 1160)
 }
 
-function saveGeneratedToStageThree() {
+function saveGeneratedToHistory() {
   if (!generatedDraft.value.trim()) return
+  const now = new Date()
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const item = {
     id: Date.now(),
-    title: '新建教案草稿',
-    summary: '已保存 · 含目标/案例/活动设计',
-    updatedAt: '刚刚',
+    title: `教案草稿-${time}`,
+    summary: '结构化教案 · Markdown 版本',
+    updatedAt: `今天 ${time}`,
     content: generatedDraft.value,
     annotations: { goal: [], localCase: [], activity: [] },
   }
   addDraft(item)
   selectSavedDraft(item)
-  currentStep.value = '已保存到第三部分，可回看和编辑'
+  currentStage.value = 3
 }
 
 function selectSavedDraft(item) {
   selectedSavedId.value = item.id
   editableTitle.value = item.title
   editableContent.value = item.content
+  currentStage.value = 3
 }
 
 function saveEditedDraft() {
   if (!selectedSavedDraft.value) return
+  const now = new Date()
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   updateDraft(selectedSavedId.value, {
-    title: editableTitle.value || '未命名草稿',
+    title: editableTitle.value || '未命名教案',
     content: editableContent.value,
-    summary: '已编辑 · 含目标/案例/活动设计',
-    updatedAt: '刚刚',
+    summary: '结构化教案 · Markdown 已编辑',
+    updatedAt: `今天 ${time}`,
   })
 }
+
+function renderMarkdown(markdown = '') {
+  const escaped = markdown
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+  const codeHandled = escaped.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+
+  const headingHandled = codeHandled
+    .replace(/^###\s+(.*)$/gm, '<h3>$1</h3>')
+    .replace(/^##\s+(.*)$/gm, '<h2>$1</h2>')
+    .replace(/^#\s+(.*)$/gm, '<h1>$1</h1>')
+
+  const listHandled = headingHandled
+    .replace(/^(\-\s+.*(?:\n\-\s+.*)*)/gm, (block) => {
+      const items = block
+        .split('\n')
+        .map((line) => line.replace(/^\-\s+/, '').trim())
+        .map((line) => `<li>${line}</li>`)
+        .join('')
+      return `<ul>${items}</ul>`
+    })
+
+  const strongHandled = listHandled.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  const paragraphHandled = strongHandled
+    .split(/\n\n+/)
+    .map((chunk) => {
+      if (/^<h\d|^<ul>|^<pre>/.test(chunk.trim())) return chunk
+      return `<p>${chunk.replace(/\n/g, '<br>')}</p>`
+    })
+    .join('')
+
+  return paragraphHandled
+}
+
+const generatedPreviewHtml = computed(() => renderMarkdown(generatedDraft.value || ''))
+const editablePreviewHtml = computed(() => renderMarkdown(editableContent.value || ''))
 </script>
 
 <template>
-  <SoloAppShell :app-name="seniorApp.appName" :title="seniorApp.lesson.title" :subtitle="seniorApp.lesson.subtitle" :stats="seniorApp.lesson.stats" :nav-items="seniorApp.navItems" :theme="seniorApp.theme">
-    <section class="feature-screen senior-workbench senior-page-distinct senior-lesson-optimized with-usage-float">
-      <div class="task-summary">
-        <div>
-          <p class="hero-kicker">备课主线</p>
-          <h3>语音输入需求 → 生成结构化草稿 → 在版本区回看与编辑</h3>
-        </div>
-        <span class="status-pill"><Mic :size="14" /> 快速结构化教案</span>
-      </div>
-
-      <div class="visual-card journey-guide-card lesson-guide-card usage-float-panel">
-        <p class="hero-kicker">使用顺序</p>
-        <div class="journey-step-list lesson-step-inline">
-          <article v-for="step in flowSteps" :key="step.id" class="journey-step-card" :class="`is-${step.status}`">
-            <span class="journey-step-index">{{ step.id }}</span>
+  <SoloAppShell
+    :app-name="seniorApp.appName"
+    :title="seniorApp.lesson.title"
+    :subtitle="seniorApp.lesson.subtitle"
+    :stats="seniorApp.lesson.stats"
+    :nav-items="seniorApp.navItems"
+    :theme="seniorApp.theme"
+  >
+    <template #left>
+      <aside class="lesson-bookmark-sidebar">
+        <div class="bookmark-card">
+          <div class="bookmark-head">
+            <ListTodo :size="16" />
+            <strong>使用顺序</strong>
+          </div>
+          <div class="bookmark-progress">
+            <UiProgress :value="navProgress" label="当前步骤" />
+          </div>
+          <button
+            v-for="item in workflow"
+            :key="item.id"
+            type="button"
+            class="bookmark-item"
+            :class="{ active: currentStage === item.id }"
+            @click="goStage(item.id)"
+          >
+            <span class="bookmark-index">{{ item.id }}</span>
             <div>
-              <strong>{{ step.title }}</strong>
-              <p>{{ step.hint }}</p>
+              <strong>{{ item.title }}</strong>
+              <p>{{ item.hint }}</p>
             </div>
+          </button>
+        </div>
+
+        <div class="bookmark-card">
+          <div class="bookmark-head">
+            <CheckCircle2 :size="16" />
+            <strong>工作清单</strong>
+          </div>
+          <article v-for="todo in todoList" :key="todo.id" class="todo-row" :class="{ done: todo.done }">
+            <span class="todo-dot"></span>
+            <p>{{ todo.text }}</p>
           </article>
         </div>
-      </div>
 
-      <section class="editor-card flow-stage-card lesson-stage-card">
-        <div class="flow-stage-head">
-          <div>
-            <p class="hero-kicker">STEP 1</p>
-            <h3>老师通过语音输入需求</h3>
+        <div class="bookmark-card">
+          <div class="bookmark-head">
+            <BookCopy :size="16" />
+            <strong>历史教案</strong>
           </div>
-          <UiButton class="mic-btn" :class="{ listening: recognition.isListening.value }" @click="toggleVoiceInput">
-            <Mic v-if="!recognition.isListening.value" :size="16" />
-            <MicOff v-else :size="16" />
-            {{ recognition.isListening.value ? '停止输入' : '麦克风输入' }}
-          </UiButton>
-        </div>
-
-        <div class="lesson-mic-status" :class="{ listening: recognition.isListening.value }">
-          <div class="mic-live-indicator" aria-hidden="true">
-            <span></span><span></span><span></span>
-          </div>
-          <p>{{ recognition.isListening.value ? '正在聆听语音输入…' : '点击麦克风后可直接说话输入需求' }}</p>
-        </div>
-
-        <textarea v-model="voiceInput" rows="5"></textarea>
-        <p class="helper-copy">建议一句话说清：教学目标 + 本地案例 + 活动设计重点。</p>
-        <p v-if="recognition.error.value" class="helper-error">{{ recognition.error.value }}</p>
-      </section>
-
-      <section class="editor-card flow-stage-card lesson-output-card">
-        <div class="flow-stage-head">
-          <div>
-            <p class="hero-kicker">STEP 2</p>
-            <h3>快速生成结构化教案草稿（此区仅预览）</h3>
-          </div>
-          <span class="status-pill"><FileText :size="14" /> 预览区</span>
-        </div>
-
-        <UiProgress :value="generateProgress" :label="currentStep" />
-        <textarea :value="generatedDraft" rows="12" readonly placeholder="生成后会在此显示草稿预览" />
-
-        <div class="bottom-action-bar">
-          <UiButton @click="generateDraft" :disabled="isGenerating">
-            <Sparkles :size="16" /> {{ isGenerating ? '生成中…' : '生成结构化草稿' }}
-          </UiButton>
-          <UiButton variant="secondary" @click="saveGeneratedToStageThree" :disabled="!generatedDraft.trim()">
-            <Save :size="16" /> 保存到第三部分
-          </UiButton>
-        </div>
-      </section>
-
-      <section class="card-list senior-draft-list lesson-history-zone">
-        <div class="panel-headline">
-          <div>
-            <p class="hero-kicker">STEP 3</p>
-            <h3>点击版本回看并编辑（编辑入口只在这里）</h3>
-          </div>
-        </div>
-
-        <div class="senior-history-grid">
           <article
             v-for="item in savedDrafts"
             :key="item.id"
-            class="data-card clickable-card lesson-history-card"
+            class="history-row"
             :class="{ active: selectedSavedId === item.id }"
             @click="selectSavedDraft(item)"
           >
-            <div class="lesson-history-meta">
-              <strong>{{ item.title }}</strong>
-              <span class="status-pill"><FileText :size="14" /> 版本</span>
-            </div>
-            <p>{{ item.summary }}</p>
+            <strong>{{ item.title }}</strong>
             <small>{{ item.updatedAt }}</small>
           </article>
         </div>
+      </aside>
+    </template>
 
-        <div v-if="selectedSavedDraft" class="editor-card version-edit-card">
+    <template #right>
+      <UiCard class="workspace-panel-card">
+        <div class="workspace-panel-head">
+          <strong>今日工作清单</strong>
+          <span class="header-channel">经验沉淀工作台</span>
+        </div>
+        <ul class="workspace-checklist">
+          <li v-for="todo in todoList" :key="todo.id">
+            <span class="workspace-check"></span>
+            <span>{{ todo.text }}</span>
+          </li>
+        </ul>
+        <div class="workspace-panel-foot">
+          <strong>备课</strong>
+          <p>建议按页面步骤从上到下完成任务。</p>
+        </div>
+      </UiCard>
+    </template>
+
+    <section class="feature-screen senior-workbench lesson-main-stage">
+      <main class="lesson-center-stage">
+        <section v-if="currentStage === 1" class="editor-card flow-stage-card">
           <div class="flow-stage-head">
             <div>
-              <p class="hero-kicker">版本编辑</p>
-              <h3>当前版本：{{ selectedSavedDraft.title }}</h3>
+              <p class="hero-kicker">STEP 1</p>
+              <h3>语音输入本次教案需求</h3>
             </div>
-            <span class="status-pill"><SquarePen :size="14" /> 可编辑</span>
-          </div>
-          <input v-model="editableTitle" placeholder="草稿标题" />
-          <textarea v-model="editableContent" rows="12"></textarea>
-          <div class="bottom-action-bar">
-            <UiButton @click="saveEditedDraft">
-              <Save :size="16" /> 保存修改
+            <UiButton class="mic-btn" :class="{ listening: recognition.isListening.value }" @click="toggleVoiceInput">
+              <Mic v-if="!recognition.isListening.value" :size="16" />
+              <MicOff v-else :size="16" />
+              {{ recognition.isListening.value ? '停止输入' : '麦克风输入' }}
             </UiButton>
           </div>
 
-          <div class="annotation-board">
-            <div class="panel-headline">
-              <div>
-                <p class="hero-kicker">课堂问题标注</p>
-                <h3>本版本已关联的语音问题记录</h3>
-              </div>
-              <span class="status-pill"><Target :size="14" /> 对应教案位置</span>
+          <div class="lesson-mic-status" :class="{ listening: recognition.isListening.value }">
+            <div class="mic-live-indicator" aria-hidden="true"><span></span><span></span><span></span></div>
+            <p>{{ recognition.isListening.value ? '正在转写语音内容…' : '点击麦克风开始录入教学需求' }}</p>
+          </div>
+
+          <textarea v-model="voiceInput" rows="8" placeholder="例如：五年级综合实践，围绕秋收农事设计目标、案例和活动流程。"></textarea>
+          <p v-if="recognition.error.value" class="helper-error">{{ recognition.error.value }}</p>
+          <div class="bottom-action-bar">
+            <UiButton @click="nextStage" :disabled="!voiceInput.trim()">
+              <StepForward :size="16" /> 下一步：生成草稿
+            </UiButton>
+          </div>
+        </section>
+
+        <section v-if="currentStage === 2" class="editor-card flow-stage-card">
+          <div class="flow-stage-head">
+            <div>
+              <p class="hero-kicker">STEP 2</p>
+              <h3>生成并查看 Markdown 教案草稿</h3>
             </div>
-            <div class="annotation-grid">
-              <article v-for="group in annotationGroups" :key="group.key" class="annotation-card">
-                <strong>{{ group.title }}</strong>
-                <div v-if="group.list.length" class="annotation-list">
-                  <p v-for="note in group.list" :key="note.id">{{ note.time }}｜{{ note.text }}</p>
-                </div>
-                <p v-else class="annotation-empty">暂无关联问题</p>
-              </article>
+            <span class="status-pill"><FilePenLine :size="14" /> Markdown 预览</span>
+          </div>
+
+          <UiProgress :value="generateProgress" :label="generateStatus" />
+
+          <div class="markdown-preview" v-html="generatedPreviewHtml"></div>
+
+          <div class="bottom-action-bar">
+            <UiButton @click="generateDraft" :disabled="isGenerating">
+              <Sparkles :size="16" /> {{ isGenerating ? '生成中…' : '生成教案草稿' }}
+            </UiButton>
+            <UiButton variant="secondary" @click="saveGeneratedToHistory" :disabled="!generatedDraft.trim()">
+              <Save :size="16" /> 保存并进入编辑
+            </UiButton>
+          </div>
+        </section>
+
+        <section v-if="currentStage === 3" class="editor-card flow-stage-card">
+          <div class="flow-stage-head">
+            <div>
+              <p class="hero-kicker">STEP 3</p>
+              <h3>Markdown 查看与编辑</h3>
+            </div>
+            <div class="choice-bar md-toggle">
+              <button class="choice-btn" :class="{ active: markdownView === 'edit' }" @click="markdownView = 'edit'">编辑</button>
+              <button class="choice-btn" :class="{ active: markdownView === 'preview' }" @click="markdownView = 'preview'">预览</button>
             </div>
           </div>
-        </div>
-      </section>
+
+          <input v-model="editableTitle" placeholder="教案标题" />
+
+          <textarea v-if="markdownView === 'edit'" v-model="editableContent" rows="16"></textarea>
+          <div v-else class="markdown-preview" v-html="editablePreviewHtml"></div>
+
+          <div class="bottom-action-bar">
+            <UiButton @click="saveEditedDraft">
+              <Save :size="16" /> 保存当前版本
+            </UiButton>
+          </div>
+        </section>
+      </main>
     </section>
   </SoloAppShell>
 </template>
