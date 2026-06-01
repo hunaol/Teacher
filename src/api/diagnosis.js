@@ -24,11 +24,17 @@ export function uploadDiagnosisImage(file, fields = {}) {
   if (fields.questionText) formData.append('questionText', fields.questionText)
   if (fields.answerText) formData.append('answerText', fields.answerText)
   if (fields.imageNote) formData.append('imageNote', fields.imageNote)
-  return client.post('/diagnoses/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  return client.post('/diagnoses/upload', formData)
 }
 
 export function archiveDiagnosis(id, note) {
   return client.post(`/diagnoses/${id}/archive`, note ? { note } : {})
+}
+
+export function listDiagnoses() {
+  return client.get('/diagnoses')
+}
+
+export function getHeatmap(className, days) {
+  return client.get('/diagnoses/heatmap', { params: { className, days } })
 }

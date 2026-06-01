@@ -22,7 +22,7 @@ client.interceptors.response.use(
     if (body && typeof body.code === 'number' && body.code !== 200) {
       return Promise.reject(new Error(body.message || '请求失败'))
     }
-    return body.data ?? body
+    return body.data !== undefined ? body.data : null
   },
   (error) => {
     if (error.response?.status === 401) {

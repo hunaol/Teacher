@@ -14,3 +14,7 @@ export function forwardQuestion(id, mentorUserId) {
   const params = mentorUserId ? { mentorUserId } : {}
   return client.post(`/qa/questions/${id}/forward`, null, { params })
 }
+
+export function replyToQuestion(id, data) {
+  return client.post(`/qa/questions/${id}/replies`, data)
+}

@@ -7,6 +7,10 @@ import UiCard from '../components/ui/UiCard.vue'
 import UiDialog from '../components/ui/UiDialog.vue'
 import UiProgress from '../components/ui/UiProgress.vue'
 import { listVideos, favoriteVideo, watchVideo } from '../api/teaching-library'
+import { createQuestion } from '../api/qa'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const appName = '新任教师端'
 const pageTitle = '本地名师经验库'
@@ -48,6 +52,8 @@ function mapVideo(r) {
 
 const videos = ref([])
 const favorites = ref(new Set())
+const watchedIds = ref(new Set())
+const watchCount = ref(0)
 const category = ref('热门')
 const currentStage = ref(1)
 const playingId = ref(null)
@@ -61,7 +67,7 @@ const derivedStats = computed(() => ({
   stats: [
     { label: '已收藏经验课', value: String(favorites.value.size) },
     { label: '视频总数', value: String(videos.value.length) },
-    { label: '待看内容', value: '—' },
+    { label: '已学习', value: String(watchCount.value) },
   ],
 }))
 
@@ -79,13 +85,15 @@ const todoList = computed(() => [
 
 const navProgress = computed(() => Math.round((currentStage.value / 3) * 100))
 
-const categories = ['热门', '课堂管理', '提问设计', '活动组织']
+const categories = ['热门', '已收藏', '课堂管理', '提问设计', '活动组织']
 
-const filteredVideos = computed(() =>
-  videos.value.filter((item) =>
-    category.value === '热门' || item.tags.some((tag) => category.value.includes(tag) || tag.includes(category.value)),
-  ),
-)
+const filteredVideos = computed(() => {
+  if (category.value === '已收藏') return videos.value.filter((item) => favorites.value.has(item.id))
+  if (category.value === '热门') return videos.value
+  return videos.value.filter((item) =>
+    item.tags.some((tag) => category.value.includes(tag) || tag.includes(category.value)),
+  )
+})
 
 const featuredVideo = computed(() =>
   filteredVideos.value.find((item) => item.id === playingId.value)
@@ -111,7 +119,7 @@ async function loadVideos() {
 async function playVideo(item) {
   playingId.value = item.id
   currentStage.value = 2
-  try { await watchVideo(item.id) } catch { /* silent */ }
+  try { await watchVideo(item.id); watchedIds.value.add(item.id); watchCount.value++ } catch { /* silent */ }
 }
 
 async function toggleFavorite(item) {
@@ -135,10 +143,26 @@ function openQaWithVideo(item) {
   currentStage.value = 3
 }
 
-function submitQuestion() {
+const submitting = ref(false)
+const submitDone = ref(false)
+
+async function submitQuestion() {
   if (!questionDraft.value.trim()) return
-  questionDraft.value = ''
-  qaOpen.value = false
+  submitting.value = true
+  try {
+    await createQuestion({
+      content: questionDraft.value.trim(),
+      sourceType: 'teaching_library_video',
+      sourceId: playingId.value,
+    })
+    submitDone.value = true
+    questionDraft.value = ''
+    setTimeout(() => { submitDone.value = false; qaOpen.value = false }, 1500)
+  } catch {
+    // error
+  } finally {
+    submitting.value = false
+  }
 }
 
 function goStage(id) { currentStage.value = id }
@@ -195,7 +219,7 @@ onMounted(() => { loadVideos() })
         <div class="panel-headline"><div><p class="hero-kicker">STEP 2</p><h3>{{ featuredVideo?.title || '' }}</h3></div><span class="status-pill"><TvMinimalPlay :size="14" /> {{ featuredVideo?.plays || '' }}</span></div>
         <div class="video-hero-card single-step-video-card">
           <div class="video-hero-cover-wrap"><img :src="featuredVideo?.cover" :alt="featuredVideo?.title" class="video-hero-cover" /><button class="video-play-mask"><PlayCircle :size="28" /><span>播放</span></button></div>
-          <div class="video-hero-info"><strong>{{ featuredVideo?.title }}</strong><small>{{ featuredVideo?.uploader }} · {{ featuredVideo?.date }}</small></div>
+          <div class="video-hero-info"><strong>{{ featuredVideo?.title }}</strong><small>{{ featuredVideo?.uploader }} · {{ featuredVideo?.date }}<span v-if="featuredVideo && watchedIds.has(featuredVideo.id)" style="color:var(--primary-strong);margin-left:8px">✓ 已学习</span></small></div>
         </div>
         <div class="bottom-action-bar">
           <UiButton variant="secondary" @click="toggleFavorite(featuredVideo)"><BookmarkCheck v-if="featuredVideo?.favorite" :size="16" /><Bookmark v-else :size="16" />{{ featuredVideo?.favorite ? '已收藏' : '收藏' }}</UiButton>
@@ -206,7 +230,8 @@ onMounted(() => { loadVideos() })
       <section v-if="currentStage === 3" class="editor-card">
         <div class="panel-headline"><div><p class="hero-kicker">STEP 3</p><h3>提交问题</h3></div></div>
         <textarea v-model="questionDraft" rows="5"></textarea>
-        <div class="bottom-action-bar"><UiButton @click="submitQuestion"><Send :size="16" /> 提交问题</UiButton></div>
+        <p v-if="submitDone" style="color:#059669;text-align:center;padding:8px">✓ 问题已提交，前往<a href="#/novice/qa" style="color:#4f46e5">答疑区</a>查看回复</p>
+        <div v-else class="bottom-action-bar"><UiButton @click="submitQuestion" :disabled="submitting"><Send :size="16" /> {{ submitting ? '提交中…' : '提交问题' }}</UiButton></div>
       </section>
 
       <UiDialog v-model:open="qaOpen" title="提问" description="">

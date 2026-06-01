@@ -6,9 +6,9 @@ import UiButton from '../components/ui/UiButton.vue'
 import UiCard from '../components/ui/UiCard.vue'
 import UiDialog from '../components/ui/UiDialog.vue'
 import UiProgress from '../components/ui/UiProgress.vue'
-import { listResources } from '../api/resource'
+import { listResources, likeResource, favoriteResource, createResource, listResourceComments, addResourceComment, listPendingAudit, reviewResource, watchResource } from '../api/resource'
 import { recommendTopic, listTopics, saveTopic } from '../api/research'
-import { listExperts, createAppointment } from '../api/expert'
+import { listExperts, createAppointment, listAppointments, updateAppointment } from '../api/expert'
 
 const appName = '骨干教师端'
 const pageTitle = '课题研究导航'
@@ -35,6 +35,16 @@ const dataAuthorized = ref(false)
 const activeTopicId = ref(null)
 const currentStage = ref(1)
 const expertOpen = ref(false)
+const appointments = ref([])
+const appointmentsOpen = ref(false)
+const shareOpen = ref(false)
+const shareForm = ref({ title: '', summary: '', subject: '数学', grade: '', resourceType: 'lesson' })
+const commentsOpen = ref(false)
+const commentResourceId = ref(null)
+const comments = ref([])
+const commentDraft = ref('')
+const pendingAudit = ref([])
+const auditOpen = ref(false)
 
 const derivedStats = computed(() => [
   { label: '在研课题', value: String(topicLibrary.value.length) },
@@ -148,6 +158,7 @@ function toggleDoc(item) {
     selectedDocIds.value.delete(item.id)
   } else {
     selectedDocIds.value.add(item.id)
+    try { watchResource(item.id) } catch { /* silent */ }
   }
   selectedDocIds.value = new Set(selectedDocIds.value)
 }
@@ -251,6 +262,46 @@ async function consultExpert() {
   }
   expertOpen.value = true
 }
+
+async function loadAppointments() {
+  try {
+    appointments.value = await listAppointments()
+    appointmentsOpen.value = true
+  } catch { /* error */ }
+}
+
+async function cancelAppointment(id) {
+  try {
+    await updateAppointment(id, { status: 'cancelled' })
+    appointments.value = appointments.value.filter((a) => a.id !== id)
+  } catch { /* error */ }
+}
+
+async function handleLike(id) { try { await likeResource(id); await loadDocLibrary() } catch { /* error */ } }
+async function handleFavorite(id) { try { await favoriteResource(id); await loadDocLibrary() } catch { /* error */ } }
+
+async function submitShare() {
+  if (!shareForm.value.title.trim()) return
+  try { await createResource(shareForm.value); shareOpen.value = false; await loadDocLibrary() } catch { /* error */ }
+}
+
+async function loadComments(id) {
+  commentResourceId.value = id
+  try { comments.value = await listResourceComments(id); commentsOpen.value = true } catch { /* error */ }
+}
+
+async function submitComment() {
+  if (!commentDraft.value.trim() || !commentResourceId.value) return
+  try { await addResourceComment(commentResourceId.value, { content: commentDraft.value.trim() }); commentDraft.value = ''; comments.value = await listResourceComments(commentResourceId.value) } catch { /* error */ }
+}
+
+async function loadPendingAudit() {
+  try { pendingAudit.value = await listPendingAudit(); auditOpen.value = true } catch { /* error */ }
+}
+
+async function approveResource(id) {
+  try { await reviewResource(id, 'approved'); pendingAudit.value = pendingAudit.value.filter((r) => r.id !== id) } catch { /* error */ }
+}
 </script>
 
 <template>
@@ -280,6 +331,9 @@ async function consultExpert() {
             <strong>{{ item.title }}</strong><small>{{ formatDate(item.createdAt) }}</small>
           </article>
         </div>
+        <div class="bottom-action-bar" style="margin-top:8px">
+          <UiButton variant="secondary" @click="loadAppointments">我的预约</UiButton>
+        </div>
       </UiCard>
     </template>
 
@@ -298,11 +352,15 @@ async function consultExpert() {
         <div class="old-library-grid">
           <article v-for="item in filteredDocs" :key="item.id" class="old-doc-card" :class="{ active: selectedDocIds.has(item.id) }" @click="toggleDoc(item)">
             <div class="old-doc-cover">教案</div>
-            <div class="old-doc-body"><strong>{{ item.title }}</strong><p>{{ item.summary }}</p><small>{{ item.subject }} ｜ {{ item.grade }} ｜ {{ item.school || '未知学校' }}</small></div>
+            <div class="old-doc-body"><strong>{{ item.title }}</strong><p>{{ item.summary }}</p><small>{{ item.subject }} ｜ {{ item.grade }} ｜ {{ item.school || '未知学校' }}</small><div style="margin-top:4px"><button class="choice-btn" @click.stop="handleLike(item.id)">👍 {{ item.likes || 0 }}</button><button class="choice-btn" @click.stop="handleFavorite(item.id)">⭐ {{ item.favoriteCount || 0 }}</button><button class="choice-btn" @click.stop="loadComments(item.id)">💬 {{ item.commentCount || 0 }}</button></div></div>
           </article>
           <p v-if="!loadingDocs && !filteredDocs.length" class="helper-copy">暂无教案资源。</p>
         </div>
-        <div class="bottom-action-bar"><UiButton @click="buildRecommendation" :disabled="!selectedDocIds.size"><Files :size="16" /> 下一步</UiButton></div>
+        <div class="bottom-action-bar">
+          <UiButton variant="secondary" @click="shareOpen = true">分享资源</UiButton>
+          <UiButton variant="secondary" @click="loadPendingAudit">待审核</UiButton>
+          <UiButton @click="buildRecommendation" :disabled="!selectedDocIds.size"><Files :size="16" /> 下一步</UiButton>
+        </div>
       </section>
 
       <section v-if="currentStage === 3" class="editor-card research-topic-editor-box">
@@ -334,6 +392,49 @@ async function consultExpert() {
 
       <UiDialog v-model:open="expertOpen" title="专家咨询草稿" description="">
         <div class="preview-paper old-library-preview"><pre>{{ topicSummary }}</pre></div>
+      </UiDialog>
+
+      <UiDialog v-model:open="appointmentsOpen" title="我的专家预约" description="">
+        <div class="card-list">
+          <article v-for="a in appointments" :key="a.id" class="data-card">
+            <strong>{{ a.title }}</strong>
+            <small>{{ a.status }} · {{ a.expert?.name || '' }}</small>
+            <p>{{ a.question }}</p>
+            <div v-if="a.status === 'pending'" class="bottom-action-bar">
+              <UiButton variant="secondary" @click="cancelAppointment(a.id)">取消预约</UiButton>
+            </div>
+          </article>
+          <p v-if="!appointments.length">暂无预约</p>
+        </div>
+      </UiDialog>
+
+      <UiDialog v-model:open="shareOpen" title="分享资源" description="">
+        <div class="login-form-clean">
+          <input v-model="shareForm.title" placeholder="资源标题" />
+          <input v-model="shareForm.summary" placeholder="简介" />
+          <input v-model="shareForm.subject" placeholder="学科" />
+          <input v-model="shareForm.grade" placeholder="年级" />
+          <UiButton @click="submitShare">提交分享</UiButton>
+        </div>
+      </UiDialog>
+
+      <UiDialog v-model:open="commentsOpen" title="评论" description="">
+        <div class="card-list">
+          <article v-for="c in comments" :key="c.id" class="data-card"><p>{{ c.content }}</p><small>{{ formatDate(c.createdAt) }}</small></article>
+          <p v-if="!comments.length">暂无评论</p>
+        </div>
+        <textarea v-model="commentDraft" rows="2" placeholder="写评论…" style="margin-top:8px"></textarea>
+        <div class="bottom-action-bar"><UiButton @click="submitComment">发表评论</UiButton></div>
+      </UiDialog>
+
+      <UiDialog v-model:open="auditOpen" title="待审核资源" description="">
+        <div class="card-list">
+          <article v-for="r in pendingAudit" :key="r.id" class="data-card">
+            <strong>{{ r.title }}</strong><small>{{ r.resourceType }} · {{ r.auditStatus }}</small>
+            <div class="bottom-action-bar"><UiButton @click="approveResource(r.id)">通过审核</UiButton></div>
+          </article>
+          <p v-if="!pendingAudit.length">暂无待审核资源</p>
+        </div>
       </UiDialog>
     </section>
   </SoloAppShell>

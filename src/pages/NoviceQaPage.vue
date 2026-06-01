@@ -7,9 +7,17 @@ import UiCard from '../components/ui/UiCard.vue'
 import UiDialog from '../components/ui/UiDialog.vue'
 import UiProgress from '../components/ui/UiProgress.vue'
 import { useAuthStore } from '../stores/authStore'
-import { listQuestions, createQuestion, forwardQuestion } from '../api/qa'
+import { listQuestions, createQuestion, replyToQuestion } from '../api/qa'
+import { listExperts } from '../api/expert'
+import { uploadFile } from '../api/file'
 
 const { user: currentUser } = useAuthStore()
+const experts = ref([])
+const mentorPickOpen = ref(false)
+const selectedMentor = ref(null)
+const imageUrl = ref('')
+const imagePreview = ref('')
+const uploadingImage = ref(false)
 
 const appName = '新任教师端'
 const pageTitle = '在线答疑'
@@ -44,29 +52,43 @@ function statusText(status) {
   return '待回复'
 }
 
+function parseContent(content) {
+  const imgMatch = content?.match(/!\[.*?\]\((.*?)\)/)
+  const imageUrl = imgMatch ? imgMatch[1] : ''
+  const text = content?.replace(/!\[.*?\]\(.*?\)/, '').trim() || ''
+  return { text, imageUrl }
+}
+
 function mapQuestion(q) {
+  const parsed = parseContent(q.content)
   return {
     id: q.id,
     userId: q.userId,
     from: resolveName(q.userId, null),
     role: statusText(q.status),
-    text: q.content,
+    text: parsed.text || q.content,
+    imageUrl: parsed.imageUrl,
     time: formatTime(q.createdAt),
     topic: q.topic || '课堂表达',
-    comments: (q.replies || []).map((r) => ({
-      id: r.id,
-      userId: r.userId,
-      from: resolveName(r.userId, r.role),
-      text: r.content,
-      role: r.role || '',
-    })),
+    comments: (q.replies || []).map((r) => {
+      const rp = parseContent(r.content)
+      return {
+        id: r.id,
+        userId: r.userId,
+        from: resolveName(r.userId, r.role),
+        text: rp.text || r.content,
+        imageUrl: rp.imageUrl,
+        role: r.role || '',
+      }
+    }),
   }
 }
 
 const records = ref([])
 const draft = ref('')
 const loading = ref(false)
-const mentorOpen = ref(false)
+const replyDraft = ref('')
+const replyingId = ref(null)
 const currentStage = ref(1)
 
 const derivedStats = computed(() => {
@@ -108,8 +130,14 @@ async function loadQuestions() {
 async function submitQuestion() {
   if (!draft.value.trim()) return
   try {
-    await createQuestion({ content: draft.value.trim() })
+    const payload = { content: draft.value.trim() }
+    if (selectedMentor.value) payload.mentorUserId = selectedMentor.value.id
+    if (imageUrl.value) payload.content = (payload.content || '') + '\n\n![图片](' + imageUrl.value + ')'
+    await createQuestion(payload)
     draft.value = ''
+    selectedMentor.value = null
+    imageUrl.value = ''
+    imagePreview.value = ''
     await loadQuestions()
     currentStage.value = 2
   } catch {
@@ -117,24 +145,46 @@ async function submitQuestion() {
   }
 }
 
-async function forwardToMentor() {
-  // Find the current user's first open question to forward
-  const ownQuestion = records.value.find(
-    (r) => r.userId === currentUser.value?.id && r.role === '待回复',
-  )
-  if (ownQuestion) {
-    try {
-      await forwardQuestion(ownQuestion.id)
-      await loadQuestions()
-    } catch {
-      // error
-    }
-  }
-  mentorOpen.value = true
-  currentStage.value = 3
+async function openMentorPicker() {
+  try { experts.value = await listExperts() } catch { /* */ }
+  mentorPickOpen.value = true
+}
+
+function pickMentor(expert) {
+  selectedMentor.value = expert
+  mentorPickOpen.value = false
+}
+
+async function handleImageUpload(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  imagePreview.value = URL.createObjectURL(file)
+  uploadingImage.value = true
+  try {
+    const result = await uploadFile(file, 'qa_question')
+    imageUrl.value = result.publicUrl
+  } catch { imagePreview.value = '' }
+  finally { uploadingImage.value = false }
+}
+
+function removeImage() {
+  imageUrl.value = ''
+  imagePreview.value = ''
 }
 
 function goStage(id) { currentStage.value = id }
+
+function startReply(id) { replyingId.value = id; replyDraft.value = '' }
+
+async function submitReply(id) {
+  if (!replyDraft.value.trim()) return
+  try {
+    await replyToQuestion(id, { content: replyDraft.value.trim() })
+    replyDraft.value = ''
+    replyingId.value = null
+    await loadQuestions()
+  } catch { /* error */ }
+}
 
 onMounted(() => { loadQuestions() })
 </script>
@@ -169,9 +219,16 @@ onMounted(() => { loadQuestions() })
       <section v-if="currentStage === 1" class="editor-card community-compose-card">
         <div class="panel-headline"><div><p class="hero-kicker">STEP 1</p><h3>发动态</h3></div></div>
         <div class="community-compose-actions">
-          <button class="community-inline-action"><ImageIcon :size="16" /> 配图</button>
-          <button class="community-inline-action" @click="forwardToMentor"><UserRoundPlus :size="16" /> @名师</button>
+          <label class="community-inline-action" style="cursor:pointer;position:relative">
+            <ImageIcon :size="16" /> {{ uploadingImage ? '上传中…' : imageUrl ? '已选图' : '配图' }}
+            <input type="file" accept="image/*" class="hidden-file" @change="handleImageUpload" />
+          </label>
+          <button class="community-inline-action" @click="openMentorPicker">
+            <UserRoundPlus :size="16" /> {{ selectedMentor ? '@' + selectedMentor.name : '@名师' }}
+          </button>
+          <span v-if="selectedMentor" style="font-size:.82rem;color:#4f46e5">{{ selectedMentor.title }} · {{ selectedMentor.field }}</span>
         </div>
+        <img v-if="imagePreview" :src="imagePreview" style="max-width:200px;max-height:150px;border-radius:8px;margin-bottom:8px" />
         <textarea v-model="draft" rows="5" placeholder="描述你在课堂上遇到的具体问题…"></textarea>
         <div class="bottom-action-bar"><UiButton @click="submitQuestion"><Send :size="16" /> 发布</UiButton></div>
       </section>
@@ -182,24 +239,29 @@ onMounted(() => { loadQuestions() })
         <div v-else class="community-post-list">
           <article v-for="item in records" :key="item.id" class="community-post-card">
             <div class="community-post-head"><div class="community-avatar alt">{{ item.from.slice(0, 1) }}</div><div class="community-post-meta"><strong>{{ item.from }}</strong><small>{{ item.time }} · {{ item.role }}</small></div></div>
-            <div class="community-post-copy"><span class="community-topic-tag"># {{ item.topic }}</span><p>{{ item.text }}</p></div>
+            <div class="community-post-copy"><span class="community-topic-tag"># {{ item.topic }}</span><p>{{ item.text }}</p><img v-if="item.imageUrl" :src="item.imageUrl" style="max-width:100%;max-height:300px;border-radius:8px;margin-top:6px" /></div>
             <div class="community-comment-box">
               <article v-for="reply in item.comments" :key="reply.id" class="community-comment-item"><strong>{{ reply.from }}</strong><p>{{ reply.text }}</p></article>
               <p v-if="!item.comments.length" class="helper-copy">暂无回复</p>
+              <div v-if="replyingId === item.id" style="margin-top:8px">
+                <textarea v-model="replyDraft" rows="2" placeholder="输入回复…"></textarea>
+                <div class="bottom-action-bar"><UiButton @click="submitReply(item.id)">发送回复</UiButton></div>
+              </div>
+              <button v-else class="choice-btn" @click="startReply(item.id)" style="margin-top:6px">回复</button>
             </div>
           </article>
           <p v-if="!records.length" class="helper-copy">暂无问题，请先发布一条。</p>
         </div>
-        <div class="bottom-action-bar"><UiButton variant="secondary" @click="forwardToMentor"><UserRoundPlus :size="16" /> 下一步</UiButton></div>
       </section>
 
-      <section v-if="currentStage === 3" class="editor-card">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 3</p><h3>转给名师</h3></div></div>
-        <div class="bottom-action-bar"><UiButton @click="mentorOpen = true"><UserRoundPlus :size="16" /> 打开预览</UiButton></div>
-      </section>
-
-      <UiDialog v-model:open="mentorOpen" title="名师转发预览" description="">
-        <div class="preview-paper"><p><strong>待转发：</strong>{{ draft || '当前输入框为空' }}</p></div>
+      <UiDialog v-model:open="mentorPickOpen" title="选择名师" description="">
+        <div class="card-list">
+          <article v-for="e in experts" :key="e.id" class="data-card" style="cursor:pointer" @click="pickMentor(e)">
+            <strong>{{ e.name }}</strong><small>{{ e.title }} · {{ e.field }}</small>
+            <p>{{ e.introduction?.slice(0, 80) || '' }}</p>
+          </article>
+          <p v-if="!experts.length">暂无可用名师</p>
+        </div>
       </UiDialog>
     </section>
   </SoloAppShell>

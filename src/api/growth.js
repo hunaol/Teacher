@@ -17,3 +17,7 @@ export function listFeedback(feedbackType) {
     params: feedbackType ? { feedbackType } : {},
   })
 }
+
+export function createFeedback(data) {
+  return client.post('/growth/events/feedback', data)
+}

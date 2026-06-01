@@ -1,8 +1,10 @@
 <script setup>
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { ArrowLeft, BookOpen, BrainCircuit, BriefcaseBusiness, ChartNoAxesColumn, CircleHelp, FileText, GraduationCap, LayoutGrid, LibraryBig, LogOut, Mic, NotebookPen, Sparkles, Telescope } from 'lucide-vue-next'
+import { ArrowLeft, Bell, BookOpen, BrainCircuit, BriefcaseBusiness, ChartNoAxesColumn, CircleHelp, FileText, GraduationCap, LayoutGrid, LibraryBig, LogOut, Menu, Mic, NotebookPen, Sparkles, Telescope, User } from 'lucide-vue-next'
 import { useAuthStore } from '../stores/authStore'
+import { ref, onMounted } from 'vue'
+import { listNotifications, markNotificationRead } from '../api/notification'
 import UiCard from '@/components/ui/UiCard.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 
@@ -18,6 +20,23 @@ const props = defineProps({
 
 const route = useRoute()
 const { logout } = useAuthStore()
+const notifications = ref([])
+const notifOpen = ref(false)
+const toolsOpen = ref(false)
+const userMenuOpen = ref(false)
+
+const toolLinks = [
+  { path: '/profile', label: '个人中心', icon: User },
+  { path: '/cases', label: '乡土案例', icon: BookOpen },
+  { path: '/courses', label: '培训课程', icon: LayoutGrid },
+  { path: '/experience', label: '经验册', icon: FileText },
+  { path: '/files', label: '文件管理', icon: FileText },
+  { path: '/reports', label: '报告中心', icon: FileText },
+]
+
+async function loadNotifs() { try { notifications.value = await listNotifications(true) } catch { /* */ } }
+async function readNotif(id) { try { await markNotificationRead(id); notifications.value = notifications.value.filter((n) => n.id !== id) } catch { /* */ } }
+onMounted(() => { loadNotifs() })
 const active = computed(() => route.path)
 
 const themeMeta = computed(() => {
@@ -118,6 +137,21 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
             <component :is="themeMeta.icon" :size="14" />
             {{ themeMeta.label }}
           </UiBadge>
+          <button class="app-sidebar-home social-home-link desktop-only-inline" @click="notifOpen = !notifOpen; loadNotifs()" style="position:relative">
+            <Bell :size="16" />
+            <span v-if="notifications.length" style="position:absolute;top:-4px;right:-6px;background:#ef4444;color:#fff;border-radius:50%;width:16px;height:16px;font-size:10px;line-height:16px;text-align:center">{{ notifications.length }}</span>
+          </button>
+          <div class="tools-dropdown-wrapper">
+            <button class="app-sidebar-home social-home-link desktop-only-inline" @click="toolsOpen = !toolsOpen">
+              <Menu :size="16" /> 工具
+            </button>
+            <div v-if="toolsOpen" class="tools-dropdown-panel" @click.stop>
+              <RouterLink v-for="t in toolLinks" :key="t.path" :to="t.path" class="tools-dropdown-item" @click="toolsOpen = false">
+                <component :is="t.icon" :size="16" />
+                <span>{{ t.label }}</span>
+              </RouterLink>
+            </div>
+          </div>
           <RouterLink to="/" class="app-sidebar-home social-home-link desktop-only-inline">
             <ArrowLeft :size="16" />
             返回首页
@@ -126,6 +160,14 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
             <LogOut :size="16" />
             退出
           </button>
+        </div>
+      </div>
+      <div v-if="notifOpen" class="editor-card" style="position:absolute;top:56px;right:16px;width:320px;z-index:100;max-height:400px;overflow-y:auto">
+        <div class="card-list">
+          <article v-for="n in notifications" :key="n.id" class="data-card" @click="readNotif(n.id)" style="cursor:pointer">
+            <strong>{{ n.title }}</strong><p>{{ n.content }}</p><small>{{ n.createdAt }}</small>
+          </article>
+          <p v-if="!notifications.length">暂无通知</p>
         </div>
       </div>
     </header>

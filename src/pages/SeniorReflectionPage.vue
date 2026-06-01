@@ -46,10 +46,21 @@ const hasAnnotations = (lesson) => {
 
 const derivedStats = computed(() => {
   const linkedCount = lessonDrafts.value.filter(hasAnnotations).length
+  const now = new Date()
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  let thisWeek = 0
+  let unlinked = 0
+  lessonDrafts.value.forEach((d) => {
+    if (!hasAnnotations(d)) unlinked++
+    const a = d.annotations || { goal: [], localCase: [], activity: [] }
+    ;[...a.goal, ...a.localCase, ...a.activity].forEach((ann) => {
+      if (ann.createdAt && new Date(ann.createdAt) >= weekAgo) thisWeek++
+    })
+  })
   return [
     { label: '已关联教案', value: String(linkedCount) },
-    { label: '本周反思', value: '—' },
-    { label: '待整理问题', value: '—' },
+    { label: '本周反思', value: String(thisWeek) },
+    { label: '待整理问题', value: String(unlinked) },
   ]
 })
 

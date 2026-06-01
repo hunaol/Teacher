@@ -7,3 +7,11 @@ export function listExperts(field) {
 export function createAppointment(data) {
   return client.post('/experts/appointments', data)
 }
+
+export function listAppointments() {
+  return client.get('/experts/appointments')
+}
+
+export function updateAppointment(id, data) {
+  return client.post(`/experts/appointments/${id}`, data)
+}

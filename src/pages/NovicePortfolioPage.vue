@@ -1,12 +1,10 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
-import { CalendarRange, Download, Eye, ListTodo, Plus } from 'lucide-vue-next'
+import { Download, Eye, Plus } from 'lucide-vue-next'
 import SoloAppShell from '../components/SoloAppShell.vue'
 import UiButton from '../components/ui/UiButton.vue'
-import UiCard from '../components/ui/UiCard.vue'
 import UiDialog from '../components/ui/UiDialog.vue'
-import UiProgress from '../components/ui/UiProgress.vue'
-import { getPortfolio, createEvent } from '../api/growth'
+import { getPortfolio, createEvent, listEvents, listFeedback, createFeedback } from '../api/growth'
 
 const appName = '新任教师端'
 const pageTitle = '成长档案袋'
@@ -39,12 +37,15 @@ function isThisWeek(iso) {
 
 const events = ref([])
 const feedbacks = ref([])
-const monthStats = ref([])
 const loading = ref(false)
 const previewOpen = ref(false)
 const draft = ref('')
 const selectedMonth = ref(new Date().getMonth())
-const currentStage = ref(1)
+const allEvents = ref([])
+const allEventsOpen = ref(false)
+const feedbackList = ref([])
+const feedbackOpen = ref(false)
+const feedbackForm = ref({ title: '', content: '', feedbackType: 'mentor_comment', source: '' })
 
 const derivedStats = computed(() => {
   const thisWeek = events.value.filter((e) => isThisWeek(e.eventTime)).length
@@ -84,22 +85,16 @@ const calendarCells = computed(() => {
   })
 })
 
-const yearCalendar = computed(() => {
-  const countByMonth = new Map()
-  monthStats.value.forEach((m) => {
-    if (m?.month) countByMonth.set(m.month, m.count || 0)
-  })
-  return monthLabels.map((label, monthIndex) => {
-    const key = `${new Date().getFullYear()}-${String(monthIndex + 1).padStart(2, '0')}`
-    const count = countByMonth.get(key) || 0
-    const colorIdx = Math.min(count, levelColors.length - 1)
-    const blocks = Array.from({ length: 28 }, (_, blockIndex) => ({
-      key: `${label}-${blockIndex}`,
-      color: levelColors[colorIdx],
-    }))
-    return { label, blocks }
-  })
+const lastRecordDate = computed(() => {
+  const sorted = [...events.value].sort((a, b) => new Date(b.eventTime) - new Date(a.eventTime))
+  return sorted[0] ? formatDate(sorted[0].eventTime) : '—'
 })
+
+const recentEvents = computed(() =>
+  [...events.value]
+    .sort((a, b) => new Date(b.eventTime) - new Date(a.eventTime))
+    .slice(0, 5),
+)
 
 const achievementWall = computed(() => {
   const lines = ['# 新任教师成长成就墙', '', `- 累计成长事件：${events.value.length}`]
@@ -120,31 +115,15 @@ const achievementWall = computed(() => {
   return lines.join('\n')
 })
 
-const workflow = computed(() => [
-  { id: 1, title: '看热力图', hint: '先看本月分布。' },
-  { id: 2, title: '写记录', hint: '补一条成长记录。' },
-  { id: 3, title: '导出成就墙', hint: '最后导出。' },
-])
-
-const navProgress = computed(() => Math.round((currentStage.value / 3) * 100))
-
-const todoList = computed(() => [
-  { id: '1', text: '查看热力图', done: true },
-  { id: '2', text: '新增记录', done: events.value.some((e) => e.eventType === 'manual') },
-  { id: '3', text: '导出成就墙', done: false },
-])
-
 async function loadPortfolio() {
   loading.value = true
   try {
     const portfolio = await getPortfolio()
     events.value = portfolio.events || []
     feedbacks.value = portfolio.feedbacks || []
-    monthStats.value = portfolio.monthStats || []
   } catch {
     events.value = []
     feedbacks.value = []
-    monthStats.value = []
   } finally {
     loading.value = false
   }
@@ -160,65 +139,124 @@ async function addItem() {
     })
     draft.value = ''
     await loadPortfolio()
-    currentStage.value = 3
   } catch {
     // error
   }
 }
 
-function goStage(id) { currentStage.value = id }
+async function loadAllEvents() {
+  try { allEvents.value = await listEvents(); allEventsOpen.value = true } catch { /* error */ }
+}
+
+async function loadFeedbackList() {
+  try { feedbackList.value = await listFeedback(); feedbackOpen.value = true } catch { /* error */ }
+}
+
+async function submitFeedback() {
+  if (!feedbackForm.value.title.trim()) return
+  try {
+    await createFeedback({
+      title: feedbackForm.value.title.trim(),
+      content: feedbackForm.value.content.trim(),
+      feedbackType: feedbackForm.value.feedbackType,
+      source: feedbackForm.value.source.trim() || undefined,
+    })
+    feedbackForm.value = { title: '', content: '', feedbackType: 'mentor_comment', source: '' }
+    await loadPortfolio()
+    await loadFeedbackList()
+  } catch { /* error */ }
+}
 
 onMounted(() => { loadPortfolio() })
 </script>
 
 <template>
   <SoloAppShell :app-name="appName" :title="pageTitle" subtitle="" :stats="derivedStats" :nav-items="navItems" :theme="theme">
-    <template #left>
-      <aside class="lesson-bookmark-sidebar">
-        <div class="bookmark-card">
-          <div class="bookmark-head"><ListTodo :size="16" /><strong>使用顺序</strong></div>
-          <div class="bookmark-progress"><UiProgress :value="navProgress" label="当前步骤" /></div>
-          <button v-for="item in workflow" :key="item.id" type="button" class="bookmark-item" :class="{ active: currentStage === item.id }" @click="goStage(item.id)">
-            <span class="bookmark-index">{{ item.id }}</span>
-            <div><strong>{{ item.title }}</strong><p>{{ item.hint }}</p></div>
-          </button>
-        </div>
-      </aside>
-    </template>
-
-    <template #right>
-      <UiCard class="workspace-panel-card">
-        <div class="workspace-panel-head"><strong>档案</strong><span class="header-channel">{{ events.length }} 条</span></div>
-        <ul class="workspace-checklist"><li v-for="todo in todoList" :key="todo.id"><span class="workspace-check"></span><span>{{ todo.text }}</span></li></ul>
-      </UiCard>
-    </template>
-
     <section class="feature-screen novice-portfolio-calendar-board">
-      <section v-if="currentStage === 1" class="editor-card portfolio-calendar-main">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 1</p><h3>{{ monthLabels[selectedMonth] }} 热力图</h3></div></div>
+      <div class="editor-card portfolio-calendar-main">
+        <div class="panel-headline">
+          <h3>{{ monthLabels[selectedMonth] }} 热力图</h3>
+          <div class="choice-bar">
+            <button class="choice-btn" @click="selectedMonth = Math.max(0, selectedMonth - 1)">‹ 上月</button>
+            <button class="choice-btn" @click="selectedMonth = Math.min(11, selectedMonth + 1)">下月 ›</button>
+          </div>
+        </div>
         <div class="portfolio-week-head"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
         <p v-if="loading" class="helper-copy">加载中…</p>
-        <div v-else class="portfolio-calendar-grid"><article v-for="cell in calendarCells" :key="cell.key" class="portfolio-calendar-cell" :style="{ background: cell.color }"><strong>{{ cell.day }}</strong><small>{{ cell.count }} 条</small></article></div>
-        <div class="bottom-action-bar"><UiButton @click="currentStage = 2"><Plus :size="16" /> 下一步</UiButton></div>
-      </section>
+        <div v-else class="portfolio-calendar-grid"><article v-for="cell in calendarCells" :key="cell.key" class="portfolio-calendar-cell" :class="{ placeholder: cell.day === '' }" :style="{ background: cell.color }"><template v-if="cell.day !== ''"><strong>{{ cell.day }}</strong><small>{{ cell.count }} 条</small></template></article></div>
+      </div>
 
-      <section v-if="currentStage === 2" class="editor-card">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 2</p><h3>新增记录</h3></div></div>
-        <textarea v-model="draft" rows="4" placeholder="写一条成长记录…"></textarea>
+      <div class="editor-card">
+        <div class="panel-headline"><h3>新增记录</h3></div>
+        <textarea v-model="draft" rows="3" placeholder="写一条成长记录…"></textarea>
         <div class="bottom-action-bar"><UiButton @click="addItem"><Plus :size="16" /> 保存</UiButton></div>
-      </section>
+      </div>
 
-      <section v-if="currentStage === 3" class="editor-card portfolio-year-card">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 3</p><h3>导出成就墙</h3></div><span class="status-pill"><CalendarRange :size="14" /> 年历</span></div>
-        <div class="portfolio-year-list"><article v-for="month in yearCalendar" :key="month.label" class="portfolio-year-row"><strong>{{ month.label }}</strong><div class="portfolio-year-blocks"><span v-for="block in month.blocks" :key="block.key" :style="{ background: block.color }"></span></div></article></div>
+      <div class="editor-card">
+        <div class="panel-headline"><h3>成长里程碑</h3></div>
+        <div class="milestone-grid">
+          <div class="milestone-item">
+            <strong>{{ events.length }}</strong>
+            <small>累计事件</small>
+          </div>
+          <div class="milestone-item">
+            <strong>{{ feedbacks.length }}</strong>
+            <small>名师点评</small>
+          </div>
+          <div class="milestone-item">
+            <strong>{{ lastRecordDate }}</strong>
+            <small>最近记录</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="editor-card">
+        <div class="panel-headline"><h3>最近记录</h3></div>
+        <div class="card-list">
+          <article v-for="item in recentEvents" :key="item.id" class="data-card">
+            <strong>{{ formatDate(item.eventTime) }}</strong>
+            <p>{{ item.title || item.content }}</p>
+          </article>
+          <article v-if="!recentEvents.length" class="data-card"><p>暂无成长记录</p></article>
+        </div>
         <div class="bottom-action-bar">
-          <UiButton variant="secondary" @click="previewOpen = true"><Eye :size="16" /> 预览</UiButton>
+          <UiButton variant="secondary" @click="loadAllEvents">全部事件</UiButton>
+          <UiButton variant="secondary" @click="loadFeedbackList">名师点评</UiButton>
+          <UiButton variant="secondary" @click="previewOpen = true"><Eye :size="16" /> 预览全部</UiButton>
           <UiButton as="a" :href="`data:text/plain;charset=utf-8,${encodeURIComponent(achievementWall)}`" download="成长成就墙.txt"><Download :size="16" /> 导出</UiButton>
         </div>
-      </section>
+      </div>
 
       <UiDialog v-model:open="previewOpen" title="成长成就墙预览" description="">
         <div class="preview-paper"><pre>{{ achievementWall }}</pre></div>
+      </UiDialog>
+
+      <UiDialog v-model:open="allEventsOpen" title="全部成长事件" description="">
+        <div class="card-list">
+          <article v-for="e in allEvents.slice(0, 30)" :key="e.id" class="data-card">
+            <strong>{{ formatDate(e.eventTime) }} · {{ e.eventType }}</strong>
+            <p>{{ e.title || e.content }}</p>
+          </article>
+          <p v-if="!allEvents.length">暂无事件</p>
+        </div>
+      </UiDialog>
+
+      <UiDialog v-model:open="feedbackOpen" title="名师点评" description="">
+        <div class="card-list">
+          <article v-for="f in feedbackList" :key="f.id" class="data-card">
+            <strong>{{ f.source || '未知' }} · {{ f.feedbackType }}</strong>
+            <small>{{ formatDate(f.createdAt) }}</small>
+            <p>{{ f.content }}</p>
+          </article>
+          <p v-if="!feedbackList.length">暂无点评</p>
+        </div>
+        <div class="editor-card" style="margin-top:12px">
+          <h4>新增点评</h4>
+          <input v-model="feedbackForm.title" placeholder="点评标题" />
+          <input v-model="feedbackForm.source" placeholder="来源（如刘教授）" />
+          <textarea v-model="feedbackForm.content" rows="3" placeholder="点评内容"></textarea>
+          <div class="bottom-action-bar"><UiButton @click="submitFeedback">提交点评</UiButton></div>
+        </div>
       </UiDialog>
     </section>
   </SoloAppShell>

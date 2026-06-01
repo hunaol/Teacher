@@ -7,6 +7,7 @@ import UiCard from '../components/ui/UiCard.vue'
 import UiProgress from '../components/ui/UiProgress.vue'
 import { useSpeechRecognition } from '../composables/useSpeechRecognition'
 import { useSeniorLessonStore } from '../composables/useSeniorLessonStore'
+import { transcribeSpeech } from '../api/speech'
 
 const {
   drafts: savedDrafts,
@@ -331,6 +332,7 @@ const editablePreviewHtml = computed(() => renderMarkdown(editableContent.value 
           </div>
 
           <textarea v-model="voiceInput" rows="8" placeholder="例如：五年级综合实践，围绕秋收农事设计目标、案例和活动流程。"></textarea>
+          <label class="ui-btn ui-btn-secondary" style="margin-top:4px;position:relative"><input type="file" accept="audio/*" class="hidden-file" @change="async (e) => { const f = e.target.files?.[0]; if (f) { try { const r = await transcribeSpeech(f); voiceInput = r.transcript || voiceInput } catch {} } }" />上传音频转文字</label>
           <p v-if="recognition.error.value" class="helper-error">{{ recognition.error.value }}</p>
           <div class="bottom-action-bar">
             <UiButton @click="nextStage" :disabled="!voiceInput.trim()">

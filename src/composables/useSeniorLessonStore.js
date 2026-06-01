@@ -35,16 +35,27 @@ function toDraftItem(lesson) {
 const drafts = ref([])
 const loading = ref(false)
 const error = ref('')
-let loaded = false
-
 async function loadDrafts() {
-  if (loaded) return
   loading.value = true
   error.value = ''
   try {
     const list = await listLessons()
     drafts.value = list.map(toDraftItem)
-    loaded = true
+    // 加载全部反思并分配到对应教案
+    try {
+      const allReflections = await listReflections(null)
+      drafts.value.forEach((draft) => {
+        draft.annotations = { goal: [], localCase: [], activity: [] }
+        allReflections
+          .filter((r) => r.lessonId === draft.id)
+          .forEach((r) => {
+            const match = r.text?.match(/^\[(goal|localCase|activity)\]\s*/)
+            const section = match ? match[1] : 'goal'
+            const text = match ? r.text.slice(match[0].length) : r.text
+            draft.annotations[section].push({ id: r.id, time: formatTime(r.createdAt), text, createdAt: r.createdAt })
+          })
+      })
+    } catch { /* reflections optional */ }
   } catch (e) {
     error.value = e.message || '加载失败'
   } finally {
@@ -158,6 +169,7 @@ async function addAnnotation(draftId, section, payload) {
         id: reflection.id,
         time: formatTime(reflection.createdAt),
         text: payload.text,
+        createdAt: reflection.createdAt,
       })
     }
     return reflection
@@ -181,6 +193,7 @@ async function loadAnnotations(lessonId) {
           id: r.id,
           time: formatTime(r.createdAt),
           text,
+          createdAt: r.createdAt,
         })
       })
     }

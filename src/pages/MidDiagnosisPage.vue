@@ -6,7 +6,7 @@ import UiButton from '../components/ui/UiButton.vue'
 import UiCard from '../components/ui/UiCard.vue'
 import UiDialog from '../components/ui/UiDialog.vue'
 import UiProgress from '../components/ui/UiProgress.vue'
-import { listDiagnosisStudents, getStudentProfile, uploadDiagnosisImage, archiveDiagnosis } from '../api/diagnosis'
+import { listDiagnosisStudents, getStudentProfile, uploadDiagnosisImage, archiveDiagnosis, createDiagnosis, listDiagnoses, getHeatmap } from '../api/diagnosis'
 
 const appName = '骨干教师端'
 const pageTitle = '错题智能诊断'
@@ -78,6 +78,13 @@ const currentStage = ref(1)
 const imagePreview = ref('')
 const reportOpen = ref(false)
 const loading = ref(false)
+const manualOpen = ref(false)
+const manualForm = ref({ studentName: '', className: '', subject: '数学', topic: '', questionText: '' })
+const heatmapData = ref(null)
+const heatmapOpen = ref(false)
+const flatRecords = ref([])
+const recordsOpen = ref(false)
+const viewMode = ref('students')
 
 const derivedStats = computed(() => {
   const highRisk = students.value.filter((s) => s.level === '高风险').length
@@ -250,6 +257,36 @@ async function saveStudent() {
   }
 }
 
+async function submitManualDiagnosis() {
+  if (!manualForm.value.studentName.trim()) return
+  try {
+    await createDiagnosis({
+      studentName: manualForm.value.studentName.trim(),
+      className: manualForm.value.className.trim() || undefined,
+      subject: manualForm.value.subject,
+      topic: manualForm.value.topic.trim() || undefined,
+      questionText: manualForm.value.questionText.trim() || undefined,
+    })
+    manualOpen.value = false
+    manualForm.value = { studentName: '', className: '', subject: '数学', topic: '', questionText: '' }
+    await loadStudents()
+  } catch { /* error */ }
+}
+
+async function loadFlatRecords() {
+  try {
+    flatRecords.value = await listDiagnoses()
+    recordsOpen.value = true
+  } catch { /* error */ }
+}
+
+async function loadHeatmapData() {
+  try {
+    heatmapData.value = await getHeatmap()
+    heatmapOpen.value = true
+  } catch { /* error */ }
+}
+
 loadStudents()
 </script>
 
@@ -303,6 +340,11 @@ loadStudents()
           </table>
         </div>
         <p v-if="!loading && !students.length" class="helper-copy">暂无诊断数据，请先上传错题。</p>
+        <div class="bottom-action-bar">
+          <UiButton variant="secondary" @click="manualOpen = true">手动录入</UiButton>
+          <UiButton variant="secondary" @click="loadFlatRecords">全部记录</UiButton>
+          <UiButton variant="secondary" @click="loadHeatmapData">热力图</UiButton>
+        </div>
       </section>
 
       <section v-if="currentStage === 2" class="editor-card student-profile-card mid-analysis-card">
@@ -337,6 +379,43 @@ loadStudents()
 
       <UiDialog v-model:open="reportOpen" title="导出预览" description="">
         <div class="preview-paper"><pre>{{ reportSummary }}</pre></div>
+      </UiDialog>
+
+      <UiDialog v-model:open="manualOpen" title="手动录入诊断" description="">
+        <div class="login-form-clean">
+          <input v-model="manualForm.studentName" placeholder="学生姓名" />
+          <input v-model="manualForm.className" placeholder="班级（如六1班）" />
+          <input v-model="manualForm.subject" placeholder="学科" />
+          <input v-model="manualForm.topic" placeholder="知识点" />
+          <textarea v-model="manualForm.questionText" rows="3" placeholder="题目描述"></textarea>
+          <UiButton @click="submitManualDiagnosis">提交诊断</UiButton>
+        </div>
+      </UiDialog>
+
+      <UiDialog v-model:open="recordsOpen" title="全部诊断记录" description="">
+        <div class="card-list">
+          <article v-for="r in flatRecords.slice(0, 20)" :key="r.id" class="data-card">
+            <strong>{{ r.studentName }} · {{ r.topic }}</strong>
+            <small>{{ formatDate(r.createdAt) }}</small>
+            <p>{{ r.rootCause || '暂无分析' }}</p>
+          </article>
+          <p v-if="!flatRecords.length">暂无记录</p>
+        </div>
+      </UiDialog>
+
+      <UiDialog v-model:open="heatmapOpen" title="班级热力图" description="">
+        <div v-if="heatmapData">
+          <p><strong>班级：</strong>{{ heatmapData.className || '全部' }}</p>
+          <p><strong>总报告数：</strong>{{ heatmapData.totalReports }}</p>
+          <p><strong>高风险学生：</strong>{{ heatmapData.highRiskStudents }}</p>
+          <div v-if="heatmapData.topics?.length" class="card-list" style="margin-top:12px">
+            <article v-for="t in heatmapData.topics" :key="t.topic" class="data-card">
+              <strong>{{ t.topic }}</strong>
+              <small>{{ t.count }} 次 · {{ t.level || '-' }}</small>
+            </article>
+          </div>
+        </div>
+        <p v-else>加载中…</p>
       </UiDialog>
     </section>
   </SoloAppShell>

@@ -17,6 +17,10 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_API_BASE_URL || 'http://localhost:8080',
           changeOrigin: true,
         },
+        '/uploads': {
+          target: env.VITE_API_BASE_URL || 'http://localhost:8080',
+          changeOrigin: true,
+        },
       },
     },
   }
