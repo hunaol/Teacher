@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onErrorCaptured } from 'vue'
 import { Bot, Copy, MessagesSquare, Play, Sparkles, Volume2, WandSparkles } from 'lucide-vue-next'
 import SoloAppShell from '../components/SoloAppShell.vue'
 import UiButton from '../components/ui/UiButton.vue'
@@ -27,12 +27,24 @@ const copied = ref(false)
 const studentQuestion = ref('为什么这里要先确定单位 1？')
 const replyDraft = ref('')
 const interactionLog = ref([])
+const ready = ref(false)
+const loadError = ref(false)
 
-const derivedStats = computed(() => [
-  { label: '可用风格', value: String(modes.value.length) },
-  { label: '本周调用', value: String(interactionLog.value.length) },
-  { label: '互动课堂', value: '—' },
-])
+onErrorCaptured((err) => {
+  console.error('MidAvatarPage error:', err)
+  loadError.value = true
+  return false
+})
+
+const derivedStats = computed(() => {
+  const m = Array.isArray(modes.value) ? modes.value : []
+  const l = Array.isArray(interactionLog.value) ? interactionLog.value : []
+  return [
+    { label: '可用风格', value: String(m.length) },
+    { label: '本周调用', value: String(l.length) },
+    { label: '互动课堂', value: '—' },
+  ]
+})
 
 const tabs = [
   { label: '讲解脚本', value: 'script' },
@@ -74,17 +86,27 @@ function getModeName(m) {
 async function loadModes() {
   try {
     const assets = await listClassroomAssets()
-    modes.value = assets.map((a) => ({
-      id: a.id,
-      name: a.title,
-      text: a.description || '',
-      assetType: a.assetType,
-    }))
-    if (modes.value.length > 0) {
+    if (!assets || !Array.isArray(assets)) {
+      modes.value = []
+      return
+    }
+    modes.value = assets.map((a) => {
+      const item = a || {}
+      return {
+        id: item.id,
+        name: item.title || item.name || '未命名',
+        text: item.description || '',
+        assetType: item.assetType || '',
+      }
+    })
+    if (modes.value.length > 0 && !mode.value) {
       mode.value = modes.value[0]
     }
-  } catch {
-    // keep empty, template fallback
+  } catch (e) {
+    console.error('Failed to load classroom assets:', e)
+    modes.value = []
+  } finally {
+    ready.value = true
   }
 }
 
@@ -116,14 +138,16 @@ function generateReply() {
   interactionLog.value.unshift(`已生成针对学生问题的回应：${studentQuestion.value}`)
 }
 
-onMounted(() => {
-  loadModes()
-})
+loadModes()
 </script>
 
 <template>
   <SoloAppShell :app-name="appName" :title="pageTitle" :subtitle="pageSubtitle" :stats="derivedStats" :nav-items="navItems" :theme="theme">
     <section class="feature-screen mid-ops-board">
+      <div v-if="loadError" class="editor-card">
+        <p>页面加载出错，请刷新重试。</p>
+      </div>
+      <template v-else>
       <div class="task-summary">
         <div>
           <p class="hero-kicker">智能数字人</p>
@@ -211,6 +235,7 @@ onMounted(() => {
           </ul>
         </div>
       </UiDialog>
+    </template>
     </section>
   </SoloAppShell>
 </template>

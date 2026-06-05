@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onErrorCaptured } from 'vue'
 import { BookPlus, CheckCircle2, FileBadge2, Files, ListTodo, LockKeyhole, Search, Send, Telescope } from 'lucide-vue-next'
 import SoloAppShell from '../components/SoloAppShell.vue'
 import UiButton from '../components/ui/UiButton.vue'
@@ -26,6 +26,14 @@ const docLibrary = ref([])
 const topicLibrary = ref([])
 const experts = ref([])
 const loadingDocs = ref(false)
+const ready = ref(false)
+const loadError = ref(false)
+
+onErrorCaptured((err) => {
+  console.error('MidResearchPage error:', err)
+  loadError.value = true
+  return false
+})
 
 const selectedDocIds = ref(new Set())
 const selectedTopic = ref({ title: '', meta: '', extra: '', sources: [], applicationDraft: '', transformed: false, createdAt: '' })
@@ -46,24 +54,35 @@ const commentDraft = ref('')
 const pendingAudit = ref([])
 const auditOpen = ref(false)
 
-const derivedStats = computed(() => [
-  { label: '在研课题', value: String(topicLibrary.value.length) },
-  { label: '本周推荐', value: '—' },
-  { label: '专家建议', value: '—' },
-])
+const derivedStats = computed(() => {
+  const tl = Array.isArray(topicLibrary.value) ? topicLibrary.value : []
+  return [
+    { label: '在研课题', value: String(tl.length) },
+    { label: '本周推荐', value: '—' },
+    { label: '专家建议', value: '—' },
+  ]
+})
 
 const filteredDocs = computed(() => {
   const value = keyword.value.trim()
-  return docLibrary.value.filter((item) => {
+  const source = Array.isArray(docLibrary.value) ? docLibrary.value : []
+  return source.filter((item) => {
+    if (!item) return false
     const matchCategory = category.value === '全部' || item.subject === category.value
-    const matchKeyword = !value || `${item.title}${item.subject}${item.grade}${item.school || ''}${item.summary || ''}`.includes(value)
+    const matchKeyword = !value || `${item.title || ''}${item.subject || ''}${item.grade || ''}${item.school || ''}${item.summary || ''}`.includes(value)
     return matchCategory && matchKeyword
   })
 })
 
-const selectedDocs = computed(() => docLibrary.value.filter((item) => selectedDocIds.value.has(item.id)))
+const selectedDocs = computed(() => {
+  const source = Array.isArray(docLibrary.value) ? docLibrary.value : []
+  return source.filter((item) => item && selectedDocIds.value.has(item.id))
+})
 
-const activeTopic = computed(() => topicLibrary.value.find((item) => item.id === activeTopicId.value) ?? null)
+const activeTopic = computed(() => {
+  const tl = Array.isArray(topicLibrary.value) ? topicLibrary.value : []
+  return tl.find((item) => item && item.id === activeTopicId.value) ?? null
+})
 
 const navProgress = computed(() => Math.round((currentStage.value / 4) * 100))
 
@@ -105,12 +124,17 @@ async function loadDocLibrary() {
     const params = { resourceType: 'lesson' }
     if (category.value !== '全部') params.subject = category.value
     const list = await listResources(params)
-    docLibrary.value = list.map((r) => ({
+    if (!list || !Array.isArray(list)) {
+      docLibrary.value = []
+      return
+    }
+    docLibrary.value = list.filter(Boolean).map((r) => ({
       ...r,
       selected: selectedDocIds.value.has(r.id),
     }))
-  } catch {
-    // keep empty library
+  } catch (e) {
+    console.error('Failed to load doc library:', e)
+    docLibrary.value = []
   } finally {
     loadingDocs.value = false
   }
@@ -119,23 +143,30 @@ async function loadDocLibrary() {
 async function loadTopics() {
   try {
     const list = await listTopics()
-    topicLibrary.value = list.map((t) => ({
+    if (!list || !Array.isArray(list)) {
+      topicLibrary.value = []
+      return
+    }
+    topicLibrary.value = list.filter(Boolean).map((t) => ({
       ...t,
       sources: t.sources ? t.sources.split(',') : [],
     }))
     if (topicLibrary.value.length > 0 && !activeTopicId.value) {
       activeTopicId.value = topicLibrary.value[0].id
     }
-  } catch {
-    // keep empty
+  } catch (e) {
+    console.error('Failed to load topics:', e)
+    topicLibrary.value = []
   }
 }
 
 async function loadExperts() {
   try {
-    experts.value = await listExperts()
-  } catch {
-    // keep empty
+    const list = await listExperts()
+    experts.value = Array.isArray(list) ? list : []
+  } catch (e) {
+    console.error('Failed to load experts:', e)
+    experts.value = []
   }
 }
 
@@ -151,6 +182,7 @@ function authorizeCases() {
   loadTopics()
   loadExperts()
   currentStage.value = 2
+  if (!ready.value) ready.value = true
 }
 
 function toggleDoc(item) {
@@ -302,6 +334,8 @@ async function loadPendingAudit() {
 async function approveResource(id) {
   try { await reviewResource(id, 'approved'); pendingAudit.value = pendingAudit.value.filter((r) => r.id !== id) } catch { /* error */ }
 }
+
+ready.value = true
 </script>
 
 <template>
@@ -325,10 +359,10 @@ async function approveResource(id) {
 
     <template #right>
       <UiCard class="workspace-panel-card">
-        <div class="workspace-panel-head"><strong>我的课题库</strong><span class="header-channel">{{ topicLibrary.length }} 项</span></div>
+        <div class="workspace-panel-head"><strong>我的课题库</strong><span class="header-channel">{{ (Array.isArray(topicLibrary) ? topicLibrary : []).length }} 项</span></div>
         <div class="card-list">
-          <article v-for="item in topicLibrary.slice(0, 4)" :key="item.id" class="history-row" :class="{ active: activeTopicId === item.id }" @click="openTopic(item)">
-            <strong>{{ item.title }}</strong><small>{{ formatDate(item.createdAt) }}</small>
+          <article v-for="item in (Array.isArray(topicLibrary) ? topicLibrary : []).slice(0, 4)" :key="item?.id ?? Math.random()" class="history-row" :class="{ active: activeTopicId === item.id }" @click="openTopic(item)">
+            <strong>{{ item?.title ?? '' }}</strong><small>{{ formatDate(item?.createdAt) }}</small>
           </article>
         </div>
         <div class="bottom-action-bar" style="margin-top:8px">
@@ -338,6 +372,10 @@ async function approveResource(id) {
     </template>
 
     <section class="feature-screen mid-ops-board mid-research-archive-board">
+      <div v-if="loadError" class="editor-card">
+        <p>页面加载出错，请刷新重试。</p>
+      </div>
+      <template v-else>
       <section v-if="currentStage === 1" class="editor-card">
         <div class="panel-headline"><div><p class="hero-kicker">STEP 1</p><h3>先授权教学案例数据</h3></div><span class="status-pill"><Telescope :size="14" /> {{ recommendationState }}</span></div>
         <div class="bottom-action-bar"><UiButton @click="authorizeCases"><LockKeyhole :size="16" /> 授权案例数据</UiButton></div>
@@ -436,6 +474,7 @@ async function approveResource(id) {
           <p v-if="!pendingAudit.length">暂无待审核资源</p>
         </div>
       </UiDialog>
+      </template>
     </section>
   </SoloAppShell>
 </template>
