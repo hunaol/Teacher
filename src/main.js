@@ -26,7 +26,7 @@ import ReportPage from './pages/ReportPage.vue'
 import DashboardPage from './pages/DashboardPage.vue'
 import { useAuthStore } from './stores/authStore'
 
-const PUBLIC_PATHS = ['/', '/senior/login', '/mid/login', '/novice/login']
+const PUBLIC_PATHS = ['/', '/choose', '/senior/login', '/mid/login', '/novice/login']
 
 function loginPath(prefix) {
   return `/${prefix}/login`
@@ -48,6 +48,7 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', name: 'home', component: HomePage },
+    { path: '/choose', name: 'choose', component: HomePage },
     { path: '/senior', redirect: '/senior/login' },
     { path: '/senior/login', component: SeniorLoginPage },
     { path: '/senior/lesson', component: SeniorLessonPage },

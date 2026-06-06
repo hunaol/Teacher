@@ -376,6 +376,13 @@ ready.value = true
         <p>页面加载出错，请刷新重试。</p>
       </div>
       <template v-else>
+      <!-- 课题库快捷入口（移动端右边栏隐藏时可见） -->
+      <div v-if="topicLibrary.length && currentStage !== 4" class="editor-card topic-quick-bar mobile-only-topic-bar">
+        <div class="bottom-action-bar">
+          <span>课题库 {{ topicLibrary.length }} 项</span>
+          <UiButton variant="secondary" @click="currentStage = 4">查看课题库</UiButton>
+        </div>
+      </div>
       <section v-if="currentStage === 1" class="editor-card">
         <div class="panel-headline"><div><p class="hero-kicker">STEP 1</p><h3>先授权教学案例数据</h3></div><span class="status-pill"><Telescope :size="14" /> {{ recommendationState }}</span></div>
         <div class="bottom-action-bar"><UiButton @click="authorizeCases"><LockKeyhole :size="16" /> 授权案例数据</UiButton></div>
@@ -426,6 +433,25 @@ ready.value = true
           </article>
           <article v-if="!topicLibrary.length" class="my-topic-row"><strong>暂无课题</strong></article>
         </div>
+
+        <!-- 选中课题详情 -->
+        <div v-if="activeTopic" class="editor-card topic-detail-card" style="margin-top:16px">
+          <div class="panel-headline">
+            <div><p class="hero-kicker">课题详情</p><h3>{{ activeTopic.title }}</h3></div>
+            <span class="status-pill" v-if="activeTopic.createdAt">{{ formatDate(activeTopic.createdAt) }}</span>
+          </div>
+          <div class="preview-paper">
+            <p v-if="activeTopic.meta"><strong>选题依据</strong><br/>{{ activeTopic.meta }}</p>
+            <p v-if="activeTopic.extra"><strong>研究计划</strong><br/>{{ activeTopic.extra }}</p>
+            <p v-if="topicSourcesStr"><strong>来源教案</strong><br/>{{ topicSourcesStr }}</p>
+            <p v-if="activeTopic.applicationDraft"><strong>申报书初稿</strong><br/>{{ activeTopic.applicationDraft }}</p>
+          </div>
+          <div class="bottom-action-bar">
+            <UiButton variant="secondary" @click="consultExpert"><Send :size="14" /> 咨询专家</UiButton>
+            <UiButton variant="secondary" @click="transformResult"><BookPlus :size="14" /> 成果转化</UiButton>
+          </div>
+        </div>
+        <p v-else-if="topicLibrary.length" class="helper-copy" style="margin-top:12px">点击上方课题查看详情</p>
       </section>
 
       <UiDialog v-model:open="expertOpen" title="专家咨询草稿" description="">
@@ -478,3 +504,8 @@ ready.value = true
     </section>
   </SoloAppShell>
 </template>
+
+<style scoped>
+.mobile-only-topic-bar { display: none; }
+@media (max-width: 1280px) { .mobile-only-topic-bar { display: block; } }
+</style>

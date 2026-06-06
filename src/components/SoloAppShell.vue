@@ -212,18 +212,6 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
 
         <aside class="workspace-rightbar desktop-only-side">
           <slot name="right">
-            <UiCard class="workspace-panel-card">
-              <div class="workspace-panel-head">
-                <strong>今日工作清单</strong>
-                <span class="header-channel">{{ themeMeta.hint }}</span>
-              </div>
-              <ul class="workspace-checklist">
-                <li v-for="item in themeMeta.checklist" :key="item">
-                  <span class="workspace-check"></span>
-                  <span>{{ item }}</span>
-                </li>
-              </ul>
-            </UiCard>
           </slot>
         </aside>
       </main>
@@ -243,3 +231,8 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
     </nav>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 768px) { .tools-dropdown-panel { right: -60px; width: 180px; } }
+@media (max-width: 480px) { .tools-dropdown-panel { right: -80px; width: 160px; } .tools-dropdown-item { padding: 8px 10px; font-size: .8rem; } }
+</style>

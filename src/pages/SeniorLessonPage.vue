@@ -109,13 +109,33 @@ const todoList = computed(() => [
 
 const navProgress = computed(() => Math.round((currentStage.value / 3) * 100))
 
+const uploading = ref(false)
+
 function toggleVoiceInput() {
   if (recognition.isListening.value) {
     recognition.stop()
     return
   }
+  if (!recognition.supported) {
+    recognition.error.value = '当前浏览器不支持语音识别，建议使用最新版 Edge 或 Chrome，或通过「上传音频」转文字。'
+    return
+  }
   recognition.reset(voiceInput.value)
   recognition.start()
+}
+
+async function handleAudioUpload(e) {
+  const f = e.target.files?.[0]
+  if (!f) return
+  uploading.value = true
+  try {
+    const r = await transcribeSpeech(f)
+    voiceInput.value = r.transcript || voiceInput.value
+  } catch (err) {
+    recognition.error.value = '音频转写失败，请重试'
+  } finally {
+    uploading.value = false
+  }
 }
 
 function goStage(id) {
@@ -328,12 +348,18 @@ const editablePreviewHtml = computed(() => renderMarkdown(editableContent.value 
 
           <div class="lesson-mic-status" :class="{ listening: recognition.isListening.value }">
             <div class="mic-live-indicator" aria-hidden="true"><span></span><span></span><span></span></div>
-            <p>{{ recognition.isListening.value ? '正在转写语音内容…' : '点击麦克风开始录入教学需求' }}</p>
+            <p>{{ recognition.isListening.value ? '正在转写语音内容…' : '点击麦克风开始录入教学需求，或上传音频文件转文字' }}</p>
           </div>
 
           <textarea v-model="voiceInput" rows="8" placeholder="例如：五年级综合实践，围绕秋收农事设计目标、案例和活动流程。"></textarea>
-          <label class="ui-btn ui-btn-secondary" style="margin-top:4px;position:relative"><input type="file" accept="audio/*" class="hidden-file" @change="async (e) => { const f = e.target.files?.[0]; if (f) { try { const r = await transcribeSpeech(f); voiceInput = r.transcript || voiceInput } catch {} } }" />上传音频转文字</label>
-          <p v-if="recognition.error.value" class="helper-error">{{ recognition.error.value }}</p>
+
+          <div class="bottom-action-bar" style="border-top:none;padding-top:4px">
+            <label class="ui-btn ui-btn-secondary" style="cursor:pointer;position:relative">
+              <input type="file" accept="audio/*" class="hidden-file" @change="handleAudioUpload" />
+              {{ uploading ? '转写中…' : '上传音频转文字' }}
+            </label>
+          </div>
+          <p v-if="recognition.error.value" style="color:var(--danger);font-size:.82rem;margin:4px 0 0">{{ recognition.error.value }}</p>
           <div class="bottom-action-bar">
             <UiButton @click="nextStage" :disabled="!voiceInput.trim()">
               <StepForward :size="16" /> 下一步：生成草稿

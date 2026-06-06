@@ -7,7 +7,7 @@ const heroScenery = 'https://images.unsplash.com/photo-1500382017468-9049fed747e
 
 const roleMeta = {
   senior: {
-    title: '老教师端',
+    title: '资深教师端',
     icon: Mic,
     scene: '沉淀经验，持续迭代教案与反思',
     image: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&q=80',
@@ -39,7 +39,7 @@ const roleMeta = {
       </RouterLink>
 
       <nav class="ysd-ref-menu" aria-label="首页导航">
-        <a href="#senior">老教师端</a>
+        <a href="#senior">资深教师端</a>
         <a href="#mid">中年教师端</a>
         <a href="#novice">新任教师端</a>
       </nav>

@@ -2,6 +2,10 @@
 import { computed, ref, nextTick } from 'vue'
 import { Bot, Send, Sparkles, Trash2 } from 'lucide-vue-next'
 import SoloAppShell from '../components/SoloAppShell.vue'
+import waitImg from '../assets/img/wait.png'
+import thinkImg from '../assets/img/think.png'
+import replyImg from '../assets/img/reply.png'
+import { chat } from '../api/deepseek'
 
 const appName = '骨干教师端'
 const pageTitle = '智能数字人'
@@ -15,10 +19,11 @@ const navItems = [
 /* ==================== 数字人状态 ==================== */
 const avatarStatus = ref('idle')
 const statusList = [
-  { key: 'idle', label: '待机中' },
-  { key: 'speaking', label: '讲解中' },
-  { key: 'thinking', label: '思考中' },
+  { key: 'idle', label: '待机中', img: waitImg },
+  { key: 'speaking', label: '讲解中', img: replyImg },
+  { key: 'thinking', label: '思考中', img: thinkImg },
 ]
+const avatarImg = computed(() => statusList.find((s) => s.key === avatarStatus.value)?.img ?? waitImg)
 
 /* ==================== 教学风格 ==================== */
 const activeStyle = ref('启发式教学')
@@ -34,13 +39,29 @@ const teachingCases = [
 
 /* ==================== 对话区域 ==================== */
 const inputText = ref('')
-const messages = ref([])
+const allMessages = ref({})
 const messagesRef = ref(null)
 const sending = ref(false)
 
+/* 当前风格的对话记录 */
+const messages = computed(() => allMessages.value[activeStyle.value] || [])
+
+/* 切换风格 */
+function switchStyle(s) {
+  activeStyle.value = s
+  if (!allMessages.value[s]) allMessages.value[s] = []
+  nextTick(() => { const el = messagesRef.value; if (el) el.scrollTop = el.scrollHeight })
+}
+
+/* 添加消息到当前风格 */
+function addMsg(msg) {
+  if (!allMessages.value[activeStyle.value]) allMessages.value[activeStyle.value] = []
+  allMessages.value[activeStyle.value].push(msg)
+}
+
 const derivedStats = computed(() => [
   { label: '教学风格', value: activeStyle.value.slice(0, 4) },
-  { label: '互动次数', value: String(messages.value.filter((m) => m.role === 'user').length) },
+  { label: '互动次数', value: String((allMessages.value[activeStyle.value] || []).filter((m) => m.role === 'user').length) },
   { label: '数字人状态', value: statusList.find((s) => s.key === avatarStatus.value)?.label ?? '—' },
 ])
 
@@ -53,27 +74,23 @@ async function handleSend() {
   const text = inputText.value.trim()
   if (!text || sending.value) return
 
-  messages.value.push({ role: 'user', content: text, time: Date.now() })
+  addMsg({ role: 'user', content: text, time: Date.now() })
   inputText.value = ''
   sending.value = true
   avatarStatus.value = 'thinking'
 
-  /* chatApi() 预留调用位置 —— 后续接入 AI */
+  const history = (allMessages.value[activeStyle.value] || []).slice(0, -1)
   try {
-    // const reply = await chatApi({ prompt: text, style: activeStyle.value })
-    // messages.value.push({ role: 'ai', content: reply, time: Date.now() })
-    // avatarStatus.value = 'speaking'
-
-    /* 占位模拟回复 */
-    await new Promise((r) => setTimeout(r, 600))
-    messages.value.push({
-      role: 'ai',
-      content: `【${activeStyle.value}模式】已收到您的教学问题。后续接入 AI 服务后，此处将展示智能讲解建议。当前为占位回复，您可以继续输入其他教学问题。`,
-      time: Date.now(),
+    const reply = await chat({
+      prompt: text,
+      style: activeStyle.value,
+      history: history.map((m) => ({ role: m.role, content: m.content })),
     })
+    addMsg({ role: 'ai', content: reply, time: Date.now() })
     avatarStatus.value = 'speaking'
-    setTimeout(() => { avatarStatus.value = 'idle' }, 2000)
-  } catch {
+    setTimeout(() => { avatarStatus.value = 'idle' }, 3000)
+  } catch (err) {
+    addMsg({ role: 'ai', content: `出错了：${err.message}`, time: Date.now() })
     avatarStatus.value = 'idle'
   } finally {
     sending.value = false
@@ -83,7 +100,7 @@ async function handleSend() {
 }
 
 function clearChat() {
-  messages.value = []
+  allMessages.value[activeStyle.value] = []
   avatarStatus.value = 'idle'
 }
 
@@ -91,14 +108,6 @@ function scrollToBottom() {
   const el = messagesRef.value
   if (el) el.scrollTop = el.scrollHeight
 }
-
-/**
- * chatApi() —— 预留 AI 接口
- * 后续接入时，替换为真实 API 调用即可
- */
-// async function chatApi({ prompt, style }) {
-//   return client.post('/avatar/chat', { prompt, style })
-// }
 </script>
 
 <template>
@@ -127,15 +136,11 @@ function scrollToBottom() {
             </span>
           </div>
 
-          <!-- 数字人舞台预留区域 -->
+          <!-- 数字人舞台 -->
           <div class="avatar-stage" :class="`avatar-status-${avatarStatus}`">
-            <div class="avatar-stage-inner">
-              <div class="avatar-placeholder-icon">
-                <Bot :size="48" />
-              </div>
-              <p class="avatar-placeholder-text">数字人形象区域</p>
-              <p class="avatar-placeholder-hint">后续接入 Live2D / 视频 / 3D 数字人</p>
-            </div>
+            <Transition name="avatar-fade" mode="out-in">
+              <img :key="avatarStatus" :src="avatarImg" :alt="statusList.find(s => s.key === avatarStatus)?.label" class="avatar-img" />
+            </Transition>
           </div>
 
           <!-- 数字人状态指示 -->
@@ -166,7 +171,7 @@ function scrollToBottom() {
               :key="s"
               class="choice-btn style-item-btn"
               :class="{ active: activeStyle === s }"
-              @click="activeStyle = s"
+              @click="switchStyle(s)"
             >
               <Sparkles v-if="activeStyle === s" :size="14" />
               {{ s }}
@@ -198,6 +203,20 @@ function scrollToBottom() {
             <strong>{{ item.title }}</strong>
             <small>{{ item.desc }}</small>
             <span class="case-arrow">点击使用 →</span>
+          </button>
+        </div>
+
+        <!-- 风格对话标签 -->
+        <div class="style-chat-tabs">
+          <button
+            v-for="s in styles"
+            :key="s"
+            class="choice-btn"
+            :class="{ active: activeStyle === s }"
+            @click="switchStyle(s)"
+          >
+            {{ s.slice(0, 4) }}
+            <span v-if="(allMessages[s] || []).length" class="style-msg-count">{{ allMessages[s].length }}</span>
           </button>
         </div>
 
@@ -307,59 +326,37 @@ function scrollToBottom() {
 /* ── 数字人舞台 ── */
 .avatar-stage {
   flex: 1;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
-  background: linear-gradient(160deg, #FDF8F0 0%, #FAF3E8 50%, #F8EFE0 100%);
-  border: 2px dashed var(--border);
-  min-height: 300px;
-  transition: border-color .3s, background .3s;
+  overflow: hidden;
+  border-radius: 12px;
+  background: linear-gradient(170deg, #FDF9F2 0%, #F8F2E8 40%, #F3ECE0 100%);
+  border: 1.5px solid var(--border);
+  min-height: 320px;
+  transition: border-color .4s;
+  padding: 0;
+}
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 8px;
 }
 
-.avatar-stage.avatar-status-speaking {
-  border-color: var(--primary);
-  background: linear-gradient(160deg, #FFF8F0 0%, #FFF4E6 50%, #FFEFDB 100%);
+/* 图片切换动画 */
+.avatar-fade-enter-active,
+.avatar-fade-leave-active {
+  transition: opacity .2s ease, transform .2s ease;
 }
-
-.avatar-stage.avatar-status-thinking {
-  border-color: var(--gold);
-  background: linear-gradient(160deg, #FFFCF5 0%, #FFF9ED 50%, #FFF6E0 100%);
+.avatar-fade-enter-from {
+  opacity: 0;
+  transform: scale(0.96);
 }
-
-.avatar-stage-inner {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 24px;
-}
-
-.avatar-placeholder-icon {
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #FFF4E0 0%, #FFEDD0 100%);
-  border: 2px solid var(--primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--primary);
-  box-shadow: 0 4px 16px rgba(227, 146, 92, 0.15);
-}
-
-.avatar-placeholder-text {
-  color: var(--text);
-  font-size: .95rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.avatar-placeholder-hint {
-  color: var(--text-faint);
-  font-size: .78rem;
-  margin: 0;
+.avatar-fade-leave-to {
+  opacity: 0;
+  transform: scale(1.02);
 }
 
 /* ── 数字人状态切换条 ── */
@@ -451,25 +448,42 @@ function scrollToBottom() {
   font-weight: 500;
 }
 
+.style-chat-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0;
+}
+.style-chat-tabs .choice-btn {
+  font-size: .78rem; min-height: 32px; padding: 0 12px;
+  position: relative;
+}
+.style-msg-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; border-radius: 9px;
+  background: var(--primary); color: #fff;
+  font-size: .65rem; font-weight: 600;
+  margin-left: 4px; padding: 0 5px;
+}
+
 /* ── 对话区域 ── */
 .chat-card {
-  flex: 1;
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
+  min-height: 280px;
   padding: 16px;
 }
 
 .chat-messages {
-  flex: 1;
+  flex: 1 1 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 200px;
+  min-height: 0;
   padding-right: 4px;
 }
+
+@media (max-width: 1024px) { .chat-card { min-height: 220px; } }
+@media (max-width: 640px) { .chat-card { min-height: 180px; } }
 
 .chat-messages::-webkit-scrollbar {
   width: 5px;
@@ -628,28 +642,26 @@ function scrollToBottom() {
 
 /* ═══════════════ 响应式 ═══════════════ */
 @media (max-width: 1280px) {
-  .avatar-workspace {
-    grid-template-columns: 1fr;
-    height: auto;
-    min-height: auto;
-  }
+  .avatar-workspace { grid-template-columns: 26% 74%; gap: 14px; }
+  .avatar-stage { min-height: 260px; }
+  .cases-grid { grid-template-columns: 1fr 1fr; }
+}
 
-  .avatar-stage {
-    min-height: 240px;
-  }
+@media (max-width: 900px) {
+  .avatar-stage { min-height: auto; aspect-ratio: 3 / 4; }
+  .avatar-img { padding: 12px; }
+}
 
-  .cases-grid {
-    grid-template-columns: 1fr 1fr;
-  }
+@media (max-width: 768px) {
+  .avatar-workspace { grid-template-columns: 1fr; height: auto; min-height: auto; }
+  .avatar-stage { min-height: 240px; max-height: 320px; }
+  .avatar-showcase-card { flex: auto; }
+  .cases-grid { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 640px) {
-  .cases-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .style-grid {
-    grid-template-columns: 1fr 1fr;
-  }
+  .avatar-stage { min-height: 200px; max-height: 260px; }
+  .cases-grid { grid-template-columns: 1fr; }
+  .style-grid { grid-template-columns: 1fr 1fr; }
 }
 </style>

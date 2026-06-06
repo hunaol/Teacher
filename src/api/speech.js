@@ -2,7 +2,7 @@ import client from './client'
 
 export function transcribeSpeech(file, language, bizType, bizId) {
   const fd = new FormData()
-  fd.append('file', file)
+  fd.append('file', file, file.name || 'recording.webm')
   if (language) fd.append('language', language)
   if (bizType) fd.append('bizType', bizType)
   if (bizId) fd.append('bizId', bizId)
