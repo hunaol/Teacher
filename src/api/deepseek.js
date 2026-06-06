@@ -1,7 +1,7 @@
 const API_BASE = 'https://api.deepseek.com'
 
 /* 在此填入你的 DeepSeek API Key */
-const API_KEY = 'sk-e62b9465dc974f9c88a43d24b4f50e1a'
+const API_KEY = ''
 
 export function hasApiKey() {
   return API_KEY.length > 0
