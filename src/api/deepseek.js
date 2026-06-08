@@ -1,7 +1,7 @@
-const API_BASE = 'https://api.deepseek.com'
+const API_BASE = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 
 /* 在此填入你的 DeepSeek API Key */
-const API_KEY = ''
+const API_KEY = 'sk-3e614319365042bf81c07a6a1f76afad'
 
 export function hasApiKey() {
   return API_KEY.length > 0
@@ -31,7 +31,7 @@ export async function chat({ prompt, style, history = [] }) {
       Authorization: `Bearer ${API_KEY}`,
     },
     body: JSON.stringify({
-      model: 'deepseek-chat',
+      model: 'qwen-plus',
       messages,
       temperature: 0.8,
       max_tokens: 2048,
