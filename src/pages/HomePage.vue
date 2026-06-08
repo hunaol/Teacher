@@ -49,8 +49,8 @@ const roleMeta = {
 
     <section class="ysd-ref-hero">
       <div class="ysd-ref-hero-copy">
-        <p class="ysd-ref-kicker">乡村教育智能代理平台</p>
-        <h1>云师道——<span>数智化助力乡村教育先行者</span></h1>
+        <p class="ysd-ref-kicker">乡村数学教师课堂教学多智能体赋能平台</p>
+        <h1>云师道·MathAgent——<span>数智化助力乡村数学教育先行者</span></h1>
         <p>
           请先选择你的教师身份入口。系统会按你当前教学阶段提供最匹配的功能流程，避免进入后无效操作。
         </p>

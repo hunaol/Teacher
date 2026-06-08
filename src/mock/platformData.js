@@ -1,6 +1,6 @@
 export const homeIntro = {
-  title: '乡村教师智能支持平台',
-  subtitle: '面向不同发展阶段教师，提供贴近真实教学场景的移动化工作应用。',
+  title: '云师道·MathAgent——乡村数学教师课堂教学多智能体赋能平台',
+  subtitle: '面向不同发展阶段的乡村数学教师，提供贴近真实教学场景的多智能体协同赋能服务。',
 }
 
 export const roleCards = [
