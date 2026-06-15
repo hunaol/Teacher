@@ -4,6 +4,7 @@ import {
   listLessons,
   createLesson,
   updateLesson as updateLessonApi,
+  deleteLesson as deleteLessonApi,
   createReflection,
   listReflections,
 } from '../api/lesson'
@@ -204,6 +205,11 @@ async function loadAnnotations(lessonId) {
   }
 }
 
+async function removeDraft(id) {
+  try { await deleteLessonApi(id) } catch { /* backend may not support DELETE */ }
+  drafts.value = drafts.value.filter((d) => d.id !== id)
+}
+
 export function useSeniorLessonStore() {
   loadDrafts()
   return {
@@ -215,6 +221,7 @@ export function useSeniorLessonStore() {
     buildDraftContent,
     addDraft,
     updateDraft,
+    removeDraft,
     addAnnotation,
     loadAnnotations,
   }

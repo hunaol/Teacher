@@ -15,14 +15,15 @@
 import { computed, ref } from 'vue'
 
 // Lucide图标组件（用于按钮和状态指示）
-import { Camera, CheckCircle2, FileText, ListTodo, RefreshCcw, Save } from 'lucide-vue-next'
+import { Camera, CheckCircle2, FileText, ListTodo, RefreshCcw, Save, TrendingUp, AlertTriangle, BookOpen, BarChart3 } from 'lucide-vue-next'
 
 // 布局与UI基础组件
-import SoloAppShell from '../components/SoloAppShell.vue'   // 单页应用外壳（导航+侧边栏+内容区）
-import UiButton from '../components/ui/UiButton.vue'         // 通用按钮组件
-import UiCard from '../components/ui/UiCard.vue'             // 通用卡片组件
-import UiDialog from '../components/ui/UiDialog.vue'         // 通用弹窗组件
-import UiProgress from '../components/ui/UiProgress.vue'     // 通用进度条组件
+import SoloAppShell from '../components/SoloAppShell.vue'
+import UiButton from '../components/ui/UiButton.vue'
+import UiCard from '../components/ui/UiCard.vue'
+import UiDialog from '../components/ui/UiDialog.vue'
+import UiProgress from '../components/ui/UiProgress.vue'
+import UiChart from '../components/charts/UiChart.vue'
 
 // 诊断相关API接口
 import {
@@ -287,6 +288,53 @@ const reportSummary = computed(() => {
     `## 改进措施`,
     current.value.strategy,
   ].join('\n')
+})
+
+/** 知识点分布柱状图配置 */
+const knowledgeChartOption = computed(() => {
+  const data = current.value?.knowledge || []
+  if (!data.length) return {}
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { left: '3%', right: '8%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
+    yAxis: { type: 'category', data: data.map((d) => d.name), axisLabel: { fontSize: 12 } },
+    series: [{
+      type: 'bar', data: data.map((d) => ({ value: d.value, itemStyle: { color: d.value < 40 ? '#EF4444' : d.value < 70 ? '#F59E0B' : '#10B981', borderRadius: [0, 6, 6, 0] } })),
+      barMaxWidth: 28,
+    }],
+  }
+})
+
+/** 错题趋势折线图（模拟数据） */
+const trendChartOption = computed(() => ({
+  tooltip: { trigger: 'axis' },
+  grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+  xAxis: { type: 'category', data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] },
+  yAxis: { type: 'value', name: '错题数' },
+  series: [{
+    type: 'line', data: [12, 8, 15, 10, 6, 9, 4],
+    smooth: true, symbol: 'circle', symbolSize: 8,
+    lineStyle: { color: '#D98C52', width: 3 },
+    itemStyle: { color: '#D98C52' },
+    areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(217,140,82,.25)' }, { offset: 1, color: 'rgba(217,140,82,.02)' }] } },
+  }],
+}))
+
+/** 知识点分布环形图 */
+const pieChartOption = computed(() => {
+  const data = current.value?.knowledge || []
+  if (!data.length) return {}
+  return {
+    tooltip: { trigger: 'item' },
+    legend: { bottom: '0%', textStyle: { fontSize: 12 } },
+    series: [{
+      type: 'pie', radius: ['45%', '72%'], center: ['50%', '45%'],
+      data: data.map((d) => ({ name: d.name, value: d.value })),
+      emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,.2)' } },
+      itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
+    }],
+  }
 })
 
 // ==================== 异步业务方法 ====================
@@ -567,6 +615,9 @@ loadStudents()
           <input v-model="keyword" placeholder="搜索学生/班级/知识点" />
         </div>
 
+        <!-- 趋势概览图 -->
+        <UiChart v-if="students.length" :option="trendChartOption" height="220px" style="margin-bottom:16px" />
+
         <!-- 加载状态提示 -->
         <p v-if="loading" class="helper-copy">加载中…</p>
 
@@ -634,25 +685,23 @@ loadStudents()
         <!-- 错题图片预览（上传后显示） -->
         <img v-if="imagePreview" :src="imagePreview" alt="错题样本" class="analysis-preview-image" />
 
-        <!-- 知识点分布条形图 -->
-        <div v-if="current?.knowledge?.length" class="knowledge-bars">
-          <article v-for="item in current.knowledge" :key="item.name" class="knowledge-bar-item">
-            <div>
-              <strong>{{ item.name }}</strong>
-              <small>{{ item.value }}%</small>
-            </div>
-            <!-- 知识点掌握程度进度条 -->
-            <div class="knowledge-track">
-              <span :style="{ width: `${item.value}%` }"></span>
-            </div>
-          </article>
+        <!-- 知识点分析图表 -->
+        <div v-if="current?.knowledge?.length" class="mid-charts-grid">
+          <UiChart :option="knowledgeChartOption" height="280px" />
+          <UiChart :option="pieChartOption" height="280px" />
         </div>
 
-        <!-- 错因分析文本域（教师可编辑） -->
-        <textarea v-model="current.reason" rows="4"></textarea>
-
-        <!-- 改进措施文本域（教师可编辑） -->
-        <textarea v-model="current.strategy" rows="4"></textarea>
+        <!-- 错因分析 -->
+        <div class="mid-analysis-fields">
+          <div class="mid-field">
+            <span class="field-label">错因分析</span>
+            <textarea v-model="current.reason" rows="3" placeholder="AI 分析或手动编辑错因…"></textarea>
+          </div>
+          <div class="mid-field">
+            <span class="field-label">改进措施</span>
+            <textarea v-model="current.strategy" rows="3" placeholder="AI 建议或手动编辑措施…"></textarea>
+          </div>
+        </div>
 
         <!-- 底部操作栏 -->
         <div class="bottom-action-bar">
@@ -760,3 +809,13 @@ loadStudents()
     </section>
   </SoloAppShell>
 </template>
+
+<style scoped>
+.mid-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 8px; }
+.mid-analysis-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.mid-field { display: grid; gap: 6px; }
+@media (max-width: 900px) {
+  .mid-charts-grid { grid-template-columns: 1fr; }
+  .mid-analysis-fields { grid-template-columns: 1fr; }
+}
+</style>

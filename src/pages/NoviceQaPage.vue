@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/authStore'
 import { listQuestions, createQuestion, replyToQuestion } from '../api/qa'
 import { listExperts } from '../api/expert'
 import { uploadFile } from '../api/file'
+import { chat } from '../api/deepseek'
 
 const { user: currentUser } = useAuthStore()
 const experts = ref([])
@@ -102,17 +103,17 @@ const derivedStats = computed(() => {
 })
 
 const workflow = computed(() => [
-  { id: 1, title: '发动态', hint: '先写课堂问题。' },
-  { id: 2, title: '看回复', hint: '看社区答疑。' },
-  { id: 3, title: '转给名师', hint: '需要时再发给专家。' },
+  { id: 1, title: '写问题', hint: '描述课堂中遇到的具体困难。' },
+  { id: 2, title: '看回复', hint: '查看社区老师的答疑。' },
+  { id: 3, title: '@名师', hint: '定向请教专家教师。' },
 ])
 
 const navProgress = computed(() => Math.round((currentStage.value / 3) * 100))
 
 const todoList = computed(() => [
-  { id: '1', text: '写下问题', done: !!draft.value.trim() },
-  { id: '2', text: '发布动态', done: records.value.some((r) => r.userId === currentUser.value?.id) },
-  { id: '3', text: '查看回复', done: currentStage.value >= 2 },
+  { id: '1', text: '已发布问题', done: records.value.some((r) => r.userId === currentUser.value?.id) },
+  { id: '2', text: '已获得回复', done: records.value.some((r) => r.role === '已回复') },
+  { id: '3', text: '已@名师', done: !!selectedMentor.value },
 ])
 
 async function loadQuestions() {
@@ -127,19 +128,36 @@ async function loadQuestions() {
   }
 }
 
+const aiReplying = ref(false)
+
 async function submitQuestion() {
   if (!draft.value.trim()) return
   try {
     const payload = { content: draft.value.trim() }
     if (selectedMentor.value) payload.mentorUserId = selectedMentor.value.id
     if (imageUrl.value) payload.content = (payload.content || '') + '\n\n![图片](' + imageUrl.value + ')'
-    await createQuestion(payload)
+    const created = await createQuestion(payload)
+    const questionId = created?.id
     draft.value = ''
     selectedMentor.value = null
     imageUrl.value = ''
     imagePreview.value = ''
     await loadQuestions()
-    currentStage.value = 2
+
+    /* 平台助理 AI 自动回复 */
+    if (questionId) {
+      aiReplying.value = true
+      try {
+        const aiReply = await chat({
+          prompt: payload.content,
+          style: '启发式教学',
+          history: [],
+        })
+        await replyToQuestion(questionId, { content: aiReply, role: '平台助理' })
+        await loadQuestions()
+      } catch { /* AI reply failed silently */ }
+      aiReplying.value = false
+    }
   } catch {
     // error
   }
@@ -216,8 +234,9 @@ onMounted(() => { loadQuestions() })
     </template>
 
     <section class="feature-screen novice-community-feed">
-      <section v-if="currentStage === 1" class="editor-card community-compose-card">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 1</p><h3>发动态</h3></div></div>
+      <!-- 顶部：提问区 -->
+      <section class="editor-card community-compose-card">
+        <div class="panel-headline"><div><p class="hero-kicker">发布问题</p><h3>提出你的课堂疑问</h3></div></div>
         <div class="community-compose-actions">
           <label class="community-inline-action" style="cursor:pointer;position:relative">
             <ImageIcon :size="16" /> {{ uploadingImage ? '上传中…' : imageUrl ? '已选图' : '配图' }}
@@ -226,20 +245,33 @@ onMounted(() => { loadQuestions() })
           <button class="community-inline-action" @click="openMentorPicker">
             <UserRoundPlus :size="16" /> {{ selectedMentor ? '@' + selectedMentor.name : '@名师' }}
           </button>
-          <span v-if="selectedMentor" style="font-size:.82rem;color:#4f46e5">{{ selectedMentor.title }} · {{ selectedMentor.field }}</span>
+          <span v-if="selectedMentor" style="font-size:.82rem;color:var(--primary-strong)">{{ selectedMentor.title }} · {{ selectedMentor.field }}</span>
         </div>
         <img v-if="imagePreview" :src="imagePreview" style="max-width:200px;max-height:150px;border-radius:8px;margin-bottom:8px" />
-        <textarea v-model="draft" rows="5" placeholder="描述你在课堂上遇到的具体问题…"></textarea>
-        <div class="bottom-action-bar"><UiButton @click="submitQuestion"><Send :size="16" /> 发布</UiButton></div>
+        <textarea v-model="draft" rows="4" placeholder="描述你在课堂上遇到的具体问题…"></textarea>
+        <div class="bottom-action-bar">
+          <UiButton @click="submitQuestion"><Send :size="16" /> 发布</UiButton>
+          <span v-if="aiReplying" style="font-size:.82rem;color:var(--primary-strong);display:flex;align-items:center;gap:6px">
+            <span class="ai-dot"></span> 平台助理回复中…
+          </span>
+        </div>
       </section>
 
-      <section v-if="currentStage === 2" class="editor-card">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 2</p><h3>看回复</h3></div></div>
+      <!-- 下方：历史问题列表 -->
+      <section class="editor-card">
+        <div class="panel-headline"><div><h3>过往问题</h3></div><span class="status-pill">{{ records.length }} 条</span></div>
         <p v-if="loading" class="helper-copy">加载中…</p>
         <div v-else class="community-post-list">
           <article v-for="item in records" :key="item.id" class="community-post-card">
-            <div class="community-post-head"><div class="community-avatar alt">{{ item.from.slice(0, 1) }}</div><div class="community-post-meta"><strong>{{ item.from }}</strong><small>{{ item.time }} · {{ item.role }}</small></div></div>
-            <div class="community-post-copy"><span class="community-topic-tag"># {{ item.topic }}</span><p>{{ item.text }}</p><img v-if="item.imageUrl" :src="item.imageUrl" style="max-width:100%;max-height:300px;border-radius:8px;margin-top:6px" /></div>
+            <div class="community-post-head">
+              <div class="community-avatar alt">{{ item.from.slice(0, 1) }}</div>
+              <div class="community-post-meta"><strong>{{ item.from }}</strong><small>{{ item.time }} · {{ item.role }}</small></div>
+            </div>
+            <div class="community-post-copy">
+              <span class="community-topic-tag"># {{ item.topic }}</span>
+              <p>{{ item.text }}</p>
+              <img v-if="item.imageUrl" :src="item.imageUrl" style="max-width:100%;max-height:300px;border-radius:8px;margin-top:6px" />
+            </div>
             <div class="community-comment-box">
               <article v-for="reply in item.comments" :key="reply.id" class="community-comment-item"><strong>{{ reply.from }}</strong><p>{{ reply.text }}</p></article>
               <p v-if="!item.comments.length" class="helper-copy">暂无回复</p>
@@ -250,7 +282,7 @@ onMounted(() => { loadQuestions() })
               <button v-else class="choice-btn" @click="startReply(item.id)" style="margin-top:6px">回复</button>
             </div>
           </article>
-          <p v-if="!records.length" class="helper-copy">暂无问题，请先发布一条。</p>
+          <p v-if="!records.length" class="helper-copy" style="padding:32px">暂无问题，请先发布一条。</p>
         </div>
       </section>
 
@@ -266,3 +298,8 @@ onMounted(() => { loadQuestions() })
     </section>
   </SoloAppShell>
 </template>
+
+<style scoped>
+.ai-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); animation: aiPulse 1s ease-in-out infinite; }
+@keyframes aiPulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+</style>

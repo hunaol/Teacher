@@ -121,61 +121,41 @@ function scrollToBottom() {
     :hide-main-header="true"
   >
     <div class="avatar-workspace">
-      <!-- ========== 左侧 40%：数字教师展示区 ========== -->
+      <!-- ========== 左侧面板：数字人 + 教学风格 ========== -->
       <aside class="avatar-left">
-        <!-- 数字人舞台卡片 -->
-        <div class="editor-card avatar-showcase-card">
-          <div class="panel-headline">
-            <div>
-              <p class="hero-kicker">数字教师</p>
-              <h3>课堂讲解助手</h3>
-            </div>
-            <span class="status-pill">
-              <Sparkles :size="14" />
-              {{ statusList.find((s) => s.key === avatarStatus)?.label }}
-            </span>
-          </div>
-
-          <!-- 数字人舞台 -->
+        <div class="editor-card avatar-panel-card">
+          <!-- 数字人舞台（小尺寸） -->
           <div class="avatar-stage" :class="`avatar-status-${avatarStatus}`">
             <Transition name="avatar-fade" mode="out-in">
               <img :key="avatarStatus" :src="avatarImg" :alt="statusList.find(s => s.key === avatarStatus)?.label" class="avatar-img" />
             </Transition>
+            <span class="avatar-stage-badge">
+              <Sparkles :size="12" />
+              {{ statusList.find((s) => s.key === avatarStatus)?.label }}
+            </span>
           </div>
 
-          <!-- 数字人状态指示 -->
+          <!-- 状态切换 -->
           <div class="avatar-status-bar">
             <button
-              v-for="item in statusList"
-              :key="item.key"
+              v-for="item in statusList" :key="item.key"
               class="choice-btn status-btn"
               :class="{ active: avatarStatus === item.key }"
               @click="avatarStatus = item.key"
-            >
-              {{ item.label }}
-            </button>
+            >{{ item.label }}</button>
           </div>
         </div>
 
-        <!-- 教学风格卡片 -->
+        <!-- 教学风格 -->
         <div class="editor-card teaching-style-card">
-          <div class="panel-headline">
-            <div>
-              <p class="hero-kicker">教学风格</p>
-              <h3>选择讲解方式</h3>
-            </div>
-          </div>
+          <p class="hero-kicker">教学风格</p>
           <div class="style-grid">
             <button
-              v-for="s in styles"
-              :key="s"
+              v-for="s in styles" :key="s"
               class="choice-btn style-item-btn"
               :class="{ active: activeStyle === s }"
               @click="switchStyle(s)"
-            >
-              <Sparkles v-if="activeStyle === s" :size="14" />
-              {{ s }}
-            </button>
+            >{{ s }}</button>
           </div>
         </div>
       </aside>
@@ -291,377 +271,192 @@ function scrollToBottom() {
 </template>
 
 <style scoped>
-/* ═══════════════════════════════════════════════
-   智能数字人页面 —— 与系统原生风格完全一致
-   色彩 / 圆角 / 阴影 / 字体 全部沿用 :root 变量
-   ═══════════════════════════════════════════════ */
-
-/* ── 整体布局：左右 40/60 ── */
+/* ═══════════════ 整体布局 ═══════════════ */
 .avatar-workspace {
   display: grid;
-  grid-template-columns: 40% 60%;
+  grid-template-columns: 340px minmax(0, 1fr);
   gap: 24px;
-  height: calc(100svh - 56px - 56px); /* 减去顶部导航 + 底部移动端导航 */
-  min-height: 680px;
-}
-
-.avatar-left,
-.avatar-right {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 0;
-}
-
-/* ═══════════════ 左侧：数字教师展示区 ═══════════════ */
-
-.avatar-showcase-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 0;
-}
-
-/* ── 数字人舞台 ── */
-.avatar-stage {
-  flex: 1;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border-radius: 12px;
-  background: linear-gradient(170deg, #FDF9F2 0%, #F8F2E8 40%, #F3ECE0 100%);
-  border: 1.5px solid var(--border);
-  min-height: 320px;
-  transition: border-color .4s;
-  padding: 0;
-}
-.avatar-img {
   width: 100%;
-  height: 100%;
-  object-fit: contain;
-  padding: 8px;
-}
-
-/* 图片切换动画 */
-.avatar-fade-enter-active,
-.avatar-fade-leave-active {
-  transition: opacity .2s ease, transform .2s ease;
-}
-.avatar-fade-enter-from {
-  opacity: 0;
-  transform: scale(0.96);
-}
-.avatar-fade-leave-to {
-  opacity: 0;
-  transform: scale(1.02);
-}
-
-/* ── 数字人状态切换条 ── */
-.avatar-status-bar {
-  display: flex;
-  gap: 8px;
-  padding-top: 4px;
-}
-
-.status-btn {
   flex: 1;
-  font-size: .82rem;
-  min-height: 36px;
-  padding: 0 8px;
-}
-
-/* ── 教学风格卡片 ── */
-.teaching-style-card {
-  flex-shrink: 0;
-}
-
-.style-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.style-item-btn {
-  font-size: .84rem;
-  min-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-/* ═══════════════ 右侧：教学助手工作区 ═══════════════ */
-
-.avatar-right {
   min-height: 0;
 }
 
-.right-title-card {
-  flex-shrink: 0;
-}
-
-/* ── 教学案例网格 ── */
-.cases-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.case-card {
-  padding: 16px;
-  cursor: pointer;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border: 1.5px solid var(--border);
-  background: var(--surface);
-  border-radius: 10px;
-  transition: all .2s;
-  font: inherit;
-  color: var(--text);
-}
-
-.case-card:hover {
-  border-color: var(--gold);
-  box-shadow: 0 4px 16px rgba(180, 140, 80, 0.12);
-  transform: translateY(-1px);
-}
-
-.case-card strong {
-  font-size: .92rem;
-}
-
-.case-card small {
-  color: var(--text-soft);
-  font-size: .8rem;
-  line-height: 1.5;
-}
-
-.case-arrow {
-  color: var(--primary-strong);
-  font-size: .75rem;
-  font-weight: 500;
-}
-
-.style-chat-tabs {
-  display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0;
-}
-.style-chat-tabs .choice-btn {
-  font-size: .78rem; min-height: 32px; padding: 0 12px;
-  position: relative;
-}
-.style-msg-count {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 18px; height: 18px; border-radius: 9px;
-  background: var(--primary); color: #fff;
-  font-size: .65rem; font-weight: 600;
-  margin-left: 4px; padding: 0 5px;
-}
-
-/* ── 对话区域 ── */
-.chat-card {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 280px;
-  padding: 16px;
-}
-
-.chat-messages {
-  flex: 1 1 0;
-  overflow-y: auto;
+.avatar-left {
   display: flex;
   flex-direction: column;
   gap: 14px;
   min-height: 0;
-  padding-right: 4px;
 }
-
-@media (max-width: 1024px) { .chat-card { min-height: 220px; } }
-@media (max-width: 640px) { .chat-card { min-height: 180px; } }
-
-.chat-messages::-webkit-scrollbar {
-  width: 5px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 3px;
-}
-
-/* ── 空状态 ── */
-.chat-empty {
-  flex: 1;
+.avatar-right {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 10px;
-  padding: 48px 24px;
+  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.chat-empty-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--surface-strong);
-  border: 1.5px solid var(--border);
+/* ═══════════════ 左侧面板 ═══════════════ */
+.avatar-panel-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+/* 数字人舞台 — 紧凑尺寸 */
+.avatar-stage {
+  position: relative;
+  border-radius: var(--radius-md);
+  background: linear-gradient(170deg, #FDF9F2 0%, #F8F2E8 40%, #F3ECE0 100%);
+  border: 1px solid var(--border-light);
+  height: 240px;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-faint);
-  margin-bottom: 8px;
 }
-
-.chat-empty p {
-  color: var(--text-soft);
-  font-size: .9rem;
-  margin: 0;
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-
-.chat-empty small {
-  color: var(--text-faint);
-  font-size: .78rem;
-}
-
-/* ── 消息项 ── */
-.chat-message {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-
-.msg-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: flex;
+.avatar-stage-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-size: .75rem;
-  font-weight: 600;
-  flex-shrink: 0;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(255,255,255,.9);
+  font-size: .72rem;
+  color: var(--primary-strong);
+  font-weight: 500;
+  backdrop-filter: blur(4px);
 }
 
-.msg-user .msg-avatar {
-  background: linear-gradient(135deg, var(--primary), var(--primary-strong));
-  color: #fff;
+.avatar-fade-enter-active,
+.avatar-fade-leave-active { transition: opacity .25s ease; }
+.avatar-fade-enter-from { opacity: 0; }
+.avatar-fade-leave-to { opacity: 0; }
+
+.avatar-status-bar { display: flex; gap: 6px; }
+.status-btn { flex: 1; font-size: .78rem; min-height: 34px; padding: 0 6px; }
+
+/* 教学风格 */
+.teaching-style-card { padding: 16px; }
+.teaching-style-card .hero-kicker { margin-bottom: 8px; }
+.style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.style-item-btn { font-size: .8rem; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; }
+
+/* ═══════════════ 右侧：聊天工作区 ═══════════════ */
+.right-title-card { flex-shrink: 0; }
+
+.cases-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex-shrink: 0; }
+.case-card {
+  padding: 16px; cursor: pointer; text-align: left;
+  display: flex; flex-direction: column; gap: 6px;
+  border: 1px solid var(--border-light); background: var(--surface);
+  border-radius: var(--radius-md); transition: all .2s;
+  font: inherit; color: var(--text);
+}
+.case-card:hover { border-color: var(--primary); box-shadow: var(--shadow); transform: translateY(-2px); }
+.case-card strong { font-size: .92rem; }
+.case-card small { color: var(--text-soft); font-size: .8rem; line-height: 1.5; }
+.case-arrow { color: var(--primary-strong); font-size: .75rem; font-weight: 500; }
+
+.style-chat-tabs { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
+.style-chat-tabs .choice-btn { font-size: .78rem; min-height: 32px; padding: 0 12px; }
+.style-msg-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; border-radius: 9px;
+  background: var(--primary); color: #fff;
+  font-size: .65rem; font-weight: 600; margin-left: 4px; padding: 0 5px;
 }
 
-.msg-ai .msg-avatar {
-  background: linear-gradient(135deg, var(--accent), #7FAE4E);
-  color: #fff;
-}
+/* ═══════════════ 对话区 ═══════════════ */
+.chat-card { flex: 1 1 0; display: flex; flex-direction: column; min-height: 300px; padding: 20px; }
+.chat-messages { flex: 1 1 0; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; min-height: 0; padding-right: 4px; }
 
-.msg-body {
-  flex: 1;
-  min-width: 0;
-}
+.chat-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 12px; padding: 48px 24px; }
+.chat-empty-icon { width: 64px; height: 64px; border-radius: var(--radius-lg); background: var(--primary-light); display: flex; align-items: center; justify-content: center; color: var(--primary); margin-bottom: 8px; }
+.chat-empty p { color: var(--text-soft); font-size: .9rem; margin: 0; }
+.chat-empty small { color: var(--text-faint); font-size: .78rem; }
 
-.msg-bubble {
-  background: var(--surface-strong);
-  border: 1.5px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 16px;
-  font-size: .9rem;
-  line-height: 1.75;
-  color: var(--text);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
+/* 消息气泡 */
+.chat-message { display: flex; gap: 12px; align-items: flex-start; }
+.msg-user { flex-direction: row-reverse; }
+.msg-avatar { width: 36px; height: 36px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; font-size: .78rem; font-weight: 600; flex-shrink: 0; }
+.msg-user .msg-avatar { background: var(--primary); color: #fff; }
+.msg-ai .msg-avatar { background: #3B82F6; color: #fff; }
+.msg-body { flex: 1; min-width: 0; }
+.msg-bubble { padding: 14px 18px; border-radius: var(--radius-lg); font-size: .9rem; line-height: 1.75; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.msg-user .msg-bubble { background: var(--primary-light); border: 1px solid rgba(217,140,82,.15); }
+.msg-ai .msg-bubble { background: var(--surface); border: 1px solid var(--border-light); box-shadow: var(--shadow-xs); }
+.msg-typing { display: flex; align-items: center; gap: 5px; padding: 14px 20px; background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-lg); }
 
-.msg-user .msg-bubble {
-  background: linear-gradient(135deg, #FFF8F0, #FFF4E6);
-  border-color: rgba(227, 146, 92, 0.2);
-}
-
-/* ── 输入中动画 ── */
-.msg-typing {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 14px 20px;
-}
-
-.typing-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--text-faint);
-  animation: typingBounce 1.2s ease-in-out infinite;
-}
-
-.typing-dot:nth-child(2) {
-  animation-delay: .15s;
-}
-
-.typing-dot:nth-child(3) {
-  animation-delay: .3s;
-}
-
+.typing-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); animation: typingBounce 1.2s ease-in-out infinite; }
+.typing-dot:nth-child(2) { animation-delay: .15s; }
+.typing-dot:nth-child(3) { animation-delay: .3s; }
 @keyframes typingBounce {
   0%, 60%, 100% { transform: translateY(0); opacity: .4; }
   30% { transform: translateY(-6px); opacity: 1; }
 }
 
-/* ── 底部输入区 ── */
-.input-card {
-  flex-shrink: 0;
-}
-
+/* 输入区 */
+.input-card { flex-shrink: 0; }
 .chat-input {
-  width: 100%;
-  padding: 12px 16px;
-  border: 1.5px solid var(--border);
-  border-radius: 10px;
-  font-size: .92rem;
-  color: var(--text);
-  background: var(--surface);
-  outline: none;
-  resize: none;
-  font-family: inherit;
-  line-height: 1.7;
+  width: 100%; padding: 12px 16px; border: 1px solid var(--border);
+  border-radius: var(--radius-md); font-size: .92rem; color: var(--text);
+  background: var(--surface); outline: none; resize: none;
+  font-family: inherit; line-height: 1.7;
   transition: border .2s, box-shadow .2s;
 }
-
-.chat-input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(227, 146, 92, 0.12);
-  background: #fff;
-}
-
-.chat-input::placeholder {
-  color: var(--text-faint);
-}
+.chat-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(217,140,82,.12); background: #fff; }
+.chat-input::placeholder { color: var(--text-faint); }
 
 /* ═══════════════ 响应式 ═══════════════ */
+
+/* 中等屏 */
 @media (max-width: 1280px) {
-  .avatar-workspace { grid-template-columns: 26% 74%; gap: 14px; }
-  .avatar-stage { min-height: 260px; }
-  .cases-grid { grid-template-columns: 1fr 1fr; }
+  .avatar-workspace { grid-template-columns: 280px minmax(0, 1fr); gap: 16px; }
+  .avatar-stage { height: 200px; }
 }
 
-@media (max-width: 900px) {
-  .avatar-stage { min-height: auto; aspect-ratio: 3 / 4; }
-  .avatar-img { padding: 12px; }
+/* <= 1100px：单列，数字人保持 cover */
+@media (max-width: 1100px) {
+  .avatar-workspace { grid-template-columns: 1fr; gap: 16px; }
+  .avatar-left { display: grid; grid-template-columns: 200px 1fr; gap: 14px; align-items: start; }
+  .avatar-panel-card { padding: 14px; }
+  .avatar-stage { height: 200px; }
+  .teaching-style-card { padding: 14px; }
 }
 
-@media (max-width: 768px) {
-  .avatar-workspace { grid-template-columns: 1fr; height: auto; min-height: auto; }
-  .avatar-stage { min-height: 240px; max-height: 320px; }
-  .avatar-showcase-card { flex: auto; }
-  .cases-grid { grid-template-columns: 1fr 1fr; }
+/* <= 778px：数字人收窄为 168×198，横排布局 */
+@media (max-width: 778px) {
+  .avatar-workspace { grid-template-columns: 1fr; gap: 14px; }
+  .avatar-left { display: grid; grid-template-columns: 168px 1fr; gap: 14px; align-items: start; }
+  .avatar-panel-card { padding: 12px; }
+  .avatar-stage { width: 168px; height: 198px; flex: none; }
+  .teaching-style-card { padding: 12px; }
+  .style-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .style-item-btn { font-size: .76rem; min-height: 36px; }
+  .cases-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
 }
 
-@media (max-width: 640px) {
-  .avatar-stage { min-height: 200px; max-height: 260px; }
+/* 平板 */
+@media (max-width: 600px) {
+  .avatar-left { grid-template-columns: 1fr; }
+  .avatar-stage { width: 168px; height: 198px; margin: 0 auto; }
   .cases-grid { grid-template-columns: 1fr; }
+  .chat-card { min-height: 240px; padding: 14px; }
+}
+
+/* 手机 */
+@media (max-width: 400px) {
+  .avatar-stage { width: 140px; height: 168px; }
   .style-grid { grid-template-columns: 1fr 1fr; }
+  .chat-card { min-height: 180px; padding: 10px; }
 }
 </style>

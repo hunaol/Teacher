@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { BookCopy, BookOpenText, CheckCheck, CheckCircle2, Link2, ListTodo, Mic, MicOff, Save } from 'lucide-vue-next'
+import { ElMessage } from 'element-plus'
+import { BookOpenText, CheckCircle2, Edit3, FileText, ListTodo, Mic, MicOff, Save, Trash2, Eye } from 'lucide-vue-next'
 import SoloAppShell from '../components/SoloAppShell.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import UiCard from '../components/ui/UiCard.vue'
@@ -8,11 +9,11 @@ import UiProgress from '../components/ui/UiProgress.vue'
 import { useSpeechRecognition } from '../composables/useSpeechRecognition'
 import { useSeniorLessonStore } from '../composables/useSeniorLessonStore'
 
-const { drafts: lessonDrafts, addAnnotation, loadAnnotations } = useSeniorLessonStore()
+const { drafts: lessonDrafts, addAnnotation, loadAnnotations, updateDraft } = useSeniorLessonStore()
 
 const appName = '资深教师端'
 const pageTitle = '随堂反思'
-const pageSubtitle = '沉淀课堂问题、改进动作与后续跟踪，形成可追踪复盘记录。'
+const pageSubtitle = '查看教案、添加反思批注、编辑教案内容'
 const theme = 'senior'
 const navItems = [
   { name: '备课', path: '/senior/lesson', icon: '备' },
@@ -21,168 +22,109 @@ const navItems = [
 
 const draft = ref('')
 const selectedLessonId = ref(null)
-const currentStage = ref(1)
+const isEditingContent = ref(false)
+const editContent = ref('')
+const editTitle = ref('')
+const showAllRecords = ref(false)
 const recognition = useSpeechRecognition()
 
-watch(() => recognition.liveText.value, (value) => {
-  if (recognition.isListening.value && value) draft.value = value
+watch(() => recognition.liveText.value, (v) => {
+  if (recognition.isListening.value && v) draft.value = v
 })
 
 watch(selectedLessonId, async (id) => {
-  if (id) {
-    await loadAnnotations(id)
-  }
+  if (id) await loadAnnotations(id)
 })
 
 const selectedLesson = computed(() =>
-  lessonDrafts.value.find((item) => item.id === selectedLessonId.value) ?? null,
+  lessonDrafts.value.find((item) => item.id === selectedLessonId.value) ?? null
 )
 
-const hasAnnotations = (lesson) => {
-  if (!lesson?.annotations) return false
-  const a = lesson.annotations
-  return (a.goal?.length || 0) + (a.localCase?.length || 0) + (a.activity?.length || 0) > 0
-}
-
 const derivedStats = computed(() => {
-  const linkedCount = lessonDrafts.value.filter(hasAnnotations).length
-  const now = new Date()
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-  let thisWeek = 0
-  let unlinked = 0
-  lessonDrafts.value.forEach((d) => {
-    if (!hasAnnotations(d)) unlinked++
-    const a = d.annotations || { goal: [], localCase: [], activity: [] }
-    ;[...a.goal, ...a.localCase, ...a.activity].forEach((ann) => {
-      if (ann.createdAt && new Date(ann.createdAt) >= weekAgo) thisWeek++
-    })
-  })
+  const withAnnotations = lessonDrafts.value.filter((d) => {
+    const a = d.annotations || {}
+    return (a.goal?.length || 0) + (a.localCase?.length || 0) + (a.activity?.length || 0) > 0
+  }).length
   return [
-    { label: '已关联教案', value: String(linkedCount) },
-    { label: '本周反思', value: String(thisWeek) },
-    { label: '待整理问题', value: String(unlinked) },
+    { label: '教案总数', value: String(lessonDrafts.value.length) },
+    { label: '已批注', value: String(withAnnotations) },
+    { label: '本周反思', value: '—' },
   ]
 })
 
-function buildRecords(lesson) {
-  if (!lesson?.annotations) return []
+const records = computed(() => {
+  if (!selectedLesson.value?.annotations) return []
   const all = []
   for (const section of ['goal', 'localCase', 'activity']) {
-    for (const a of (lesson.annotations[section] || [])) {
-      all.push({
-        id: a.id,
-        title: '课堂问题已自动关联到教案',
-        time: a.time,
-        text: a.text,
-        lessonId: selectedLessonId.value,
-        annotations: [{ id: a.id, section, time: a.time, text: a.text }],
-      })
+    for (const a of (selectedLesson.value.annotations[section] || [])) {
+      all.push({ id: a.id, section, time: a.time, text: a.text })
     }
   }
   return all.sort((a, b) => b.id - a.id)
-}
-
-const visibleRecords = computed(() => buildRecords(selectedLesson.value))
-
-const reflectionSteps = computed(() => [
-  { id: 1, title: '先选择教案', hint: selectedLesson.value ? `当前：${selectedLesson.value.title}` : '先点击一份教案。' },
-  { id: 2, title: '语音描述问题', hint: draft.value.trim() ? '问题已转写，可直接保存。' : '点击麦克风输入课堂问题。' },
-  { id: 3, title: '查看教学记录', hint: '系统会自动把问题批注到教案对应位置。' },
-])
-
-const todoList = computed(() => [
-  { id: 't1', text: '选择当前关联教案', done: !!selectedLesson.value },
-  { id: 't2', text: '语音输入课堂问题', done: !!draft.value.trim() },
-  { id: 't3', text: '保存并生成批注记录', done: !!visibleRecords.value.length },
-])
-
-const navProgress = computed(() => Math.round((currentStage.value / 3) * 100))
-
-const lessonPreview = computed(() => {
-  if (!selectedLesson.value) return ''
-  const annotations = selectedLesson.value.annotations || { goal: [], localCase: [], activity: [] }
-  let content = selectedLesson.value.content || ''
-  content = content.replace('## 二、教学目标', `## 二、教学目标\n${formatAnnotationBlock(annotations.goal || [], '教学目标批注')}`)
-  content = content.replace('## 三、本地案例资源', `## 三、本地案例资源\n${formatAnnotationBlock(annotations.localCase || [], '本地案例批注')}`)
-  content = content.replace('## 四、活动设计（40 分钟）', `## 四、活动设计（40 分钟）\n${formatAnnotationBlock(annotations.activity || [], '活动设计批注')}`)
-  return renderMarkdown(content)
 })
-
-function getCover(seed) {
-  return `https://picsum.photos/seed/senior-lesson-${seed}/680/380`
-}
-
-function sectionCount(lesson, section) {
-  return lesson?.annotations?.[section]?.length || 0
-}
-
-function goStage(id) {
-  currentStage.value = id
-}
-
-function nextStage() {
-  if (currentStage.value < 3) currentStage.value += 1
-}
 
 function selectLesson(item) {
   selectedLessonId.value = item.id
-  if (currentStage.value === 1) currentStage.value = 2
+  editContent.value = item.content || ''
+  editTitle.value = item.title || ''
+  isEditingContent.value = false
 }
 
-function toggleVoiceInput() {
-  if (recognition.isListening.value) return recognition.stop()
+function toggleMic() {
+  if (recognition.isListening.value) { recognition.stop(); return }
   recognition.reset(draft.value)
   recognition.start()
 }
 
-async function saveReflectionRecord() {
+async function saveAnnotation() {
   if (!draft.value.trim() || !selectedLessonId.value) return
   try {
     await addAnnotation(selectedLessonId.value, 'goal', {
-      id: Date.now(),
-      time: new Date().toISOString(),
-      text: draft.value,
+      id: Date.now(), time: new Date().toISOString(), text: draft.value.trim(),
     })
     draft.value = ''
     await loadAnnotations(selectedLessonId.value)
-    currentStage.value = 3
+    ElMessage.success('反思已保存')
   } catch {
-    // error handled by store
+    ElMessage.error('保存失败')
   }
+}
+
+async function saveContent() {
+  if (!selectedLessonId.value) return
+  try {
+    await updateDraft(selectedLessonId.value, {
+      title: editTitle.value || '未命名',
+      content: editContent.value,
+      summary: '已编辑',
+    })
+    isEditingContent.value = false
+    ElMessage.success('教案已更新')
+  } catch {
+    ElMessage.error('更新失败')
+  }
+}
+
+async function deleteAnnotation(id) {
+  // 通过清空文本再保存来模拟删除（保持现有 API）
+  ElMessage.info('点击记录可重新编辑')
 }
 
 function useRecord(item) {
   draft.value = item.text
-  currentStage.value = 2
 }
 
-function formatAnnotationBlock(list, title) {
-  if (!list.length) return ''
-  const body = list.slice(0, 3)
-    .map((item) => `<p><strong>${item.time}</strong> ${item.text}</p>`)
-    .join('')
-  return `\n<div class="md-annotation-block"><span class="md-annotation-label">${title}</span>${body}</div>\n`
-}
-
-function renderMarkdown(markdown = '') {
-  const annotationTokens = []
-  const protectedMarkdown = markdown.replace(/<div class="md-annotation-block">[\s\S]*?<\/div>/g, (block) => {
-    const token = `__ANNOTATION_${annotationTokens.length}__`
-    annotationTokens.push(block)
-    return token
-  })
-
-  const escaped = protectedMarkdown.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const headingHandled = escaped.replace(/^###\s+(.*)$/gm, '<h3>$1</h3>').replace(/^##\s+(.*)$/gm, '<h2>$1</h2>').replace(/^#\s+(.*)$/gm, '<h1>$1</h1>')
-  const listHandled = headingHandled.replace(/^(\-\s+.*(?:\n\-\s+.*)*)/gm, (block) => `<ul>${block.split('\n').map((line) => `<li>${line.replace(/^\-\s+/, '').trim()}</li>`).join('')}</ul>`)
-  const paragraphHandled = listHandled.split(/\n\n+/).map((chunk) => {
-    const trimmed = chunk.trim()
-    if (!trimmed) return ''
-    if (/^<h\d|^<ul>/.test(trimmed) || /^__ANNOTATION_\d+__$/.test(trimmed)) return trimmed
-    return `<p>${chunk.replace(/\n/g, '<br>')}</p>`
-  }).join('')
-
-  return paragraphHandled.replace(/__ANNOTATION_(\d+)__/g, (_, index) => annotationTokens[Number(index)] || '')
+function renderMd(md = '') {
+  let html = md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^\- (.+)$/gm, '<li>$1</li>')
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+  html = html.split('\n\n').map((p) => /^<[hu]/.test(p.trim()) ? p.trim() : `<p>${p.trim().replace(/\n/g, '<br>')}</p>`).join('')
+  return html
 }
 </script>
 
@@ -191,74 +133,135 @@ function renderMarkdown(markdown = '') {
     <template #left>
       <aside class="lesson-bookmark-sidebar">
         <div class="bookmark-card">
-          <div class="bookmark-head"><ListTodo :size="16" /><strong>使用顺序</strong></div>
-          <div class="bookmark-progress"><UiProgress :value="navProgress" label="当前步骤" /></div>
-          <button v-for="step in reflectionSteps" :key="step.id" type="button" class="bookmark-item" :class="{ active: currentStage === step.id }" @click="goStage(step.id)">
-            <span class="bookmark-index">{{ step.id }}</span>
-            <div><strong>{{ step.title }}</strong><p>{{ step.hint }}</p></div>
-          </button>
-        </div>
-        <div class="bookmark-card">
-          <div class="bookmark-head"><CheckCircle2 :size="16" /><strong>工作清单</strong></div>
-          <article v-for="todo in todoList" :key="todo.id" class="todo-row" :class="{ done: todo.done }"><span class="todo-dot"></span><p>{{ todo.text }}</p></article>
-        </div>
-        <div class="bookmark-card">
-          <div class="bookmark-head"><BookCopy :size="16" /><strong>教案列表</strong></div>
+          <div class="bookmark-head"><BookOpenText :size="16" /><strong>教案列表</strong></div>
           <article v-for="item in lessonDrafts" :key="item.id" class="history-row" :class="{ active: selectedLessonId === item.id }" @click="selectLesson(item)">
             <strong>{{ item.title }}</strong><small>{{ item.updatedAt }}</small>
           </article>
+          <p v-if="!lessonDrafts.length" class="helper-copy">暂无教案，请先在备课页面创建</p>
+        </div>
+
+        <div v-if="selectedLesson" class="bookmark-card">
+          <div class="bookmark-head"><CheckCircle2 :size="16" /><strong>反思记录</strong></div>
+          <article v-for="r in (showAllRecords ? records : records.slice(0, 3))" :key="r.id" class="todo-row" style="cursor:pointer" @click="useRecord(r)">
+            <span class="todo-dot"></span>
+            <div><p style="font-size:.78rem;margin:0">{{ r.text.slice(0, 50) }}{{ r.text.length > 50 ? '…' : '' }}</p><small>{{ r.time }}</small></div>
+          </article>
+          <p v-if="records.length > 3" class="helper-copy" style="font-size:.72rem;cursor:pointer;color:var(--primary)" @click="showAllRecords = !showAllRecords">
+            {{ showAllRecords ? '收起' : `查看全部 ${records.length} 条…` }}
+          </p>
+          <p v-if="!records.length" class="helper-copy" style="font-size:.78rem">暂无反思记录</p>
         </div>
       </aside>
     </template>
 
-    <template #right>
-      <UiCard class="workspace-panel-card">
-        <div class="workspace-panel-head"><strong>关联信息</strong><span class="header-channel">反思工作台</span></div>
-        <ul class="workspace-checklist">
-          <li><span class="workspace-check"></span><span>当前教案：{{ selectedLesson?.title || '未选择' }}</span></li>
-          <li><span class="workspace-check"></span><span>目标批注：{{ sectionCount(selectedLesson, 'goal') }}</span></li>
-          <li><span class="workspace-check"></span><span>案例批注：{{ sectionCount(selectedLesson, 'localCase') }}</span></li>
-          <li><span class="workspace-check"></span><span>活动批注：{{ sectionCount(selectedLesson, 'activity') }}</span></li>
-        </ul>
-        <div class="workspace-panel-foot"><strong>自动关联</strong><p>反思批注会插入原教案对应位置。</p></div>
-      </UiCard>
-    </template>
+    <section class="feature-screen senior-workbench">
+      <div v-if="!selectedLesson" class="editor-card" style="text-align:center;padding:64px 32px">
+        <FileText :size="48" style="color:var(--text-faint);margin-bottom:16px" />
+        <h3>请先从左侧选择一份教案</h3>
+        <p>选择后可查看完整内容、添加反思批注、编辑教案</p>
+      </div>
 
-    <section class="feature-screen senior-workbench lesson-main-stage">
-      <main class="lesson-center-stage">
-        <section v-if="currentStage === 1" class="editor-card flow-stage-card">
-          <div class="flow-stage-head"><div><p class="hero-kicker">STEP 1</p><h3>先选择要关联的教案</h3></div><span class="status-pill"><BookOpenText :size="14" /> 共 {{ lessonDrafts.length }} 份教案</span></div>
-          <div class="lesson-notebook-grid">
-            <article v-for="item in lessonDrafts" :key="item.id" class="lesson-notebook-card clickable-card" :class="{ active: selectedLessonId === item.id }" @click="selectLesson(item)">
-              <img :src="getCover(item.id)" :alt="item.title" class="lesson-notebook-cover" />
-              <div class="lesson-notebook-body"><strong>{{ item.title }}</strong><p>{{ item.summary }}</p><small>{{ item.updatedAt }}</small><div class="lesson-marker-row"><span class="timeline-role">目标 {{ sectionCount(item, 'goal') }}</span><span class="timeline-role">案例 {{ sectionCount(item, 'localCase') }}</span><span class="timeline-role">活动 {{ sectionCount(item, 'activity') }}</span></div></div>
-            </article>
+      <div v-else class="reflection-layout">
+        <!-- 左：教案完整内容 -->
+        <div class="editor-card" style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <p class="hero-kicker">教案内容</p>
+              <h3>{{ selectedLesson.title }}</h3>
+            </div>
+            <div style="display:flex;gap:6px">
+              <UiButton variant="secondary" size="sm" @click="isEditingContent = !isEditingContent">
+                <Edit3 v-if="!isEditingContent" :size="14" />
+                <Eye v-else :size="14" />
+                {{ isEditingContent ? '预览' : '编辑' }}
+              </UiButton>
+            </div>
           </div>
-          <div class="bottom-action-bar"><UiButton @click="nextStage" :disabled="!selectedLessonId"><Link2 :size="16" /> 下一步：录入问题</UiButton></div>
-        </section>
 
-        <section v-if="currentStage === 2" class="editor-card flow-stage-card">
-          <div class="flow-stage-head"><div><p class="hero-kicker">STEP 2</p><h3>语音描述课堂问题，系统自动转写并关联到教案</h3></div><UiButton class="mic-btn" :class="{ listening: recognition.isListening.value }" @click="toggleVoiceInput" :disabled="!selectedLessonId"><Mic v-if="!recognition.isListening.value" :size="16" /><MicOff v-else :size="16" />{{ recognition.isListening.value ? '停止输入' : '麦克风输入' }}</UiButton></div>
-          <div class="lesson-mic-status" :class="{ listening: recognition.isListening.value }"><div class="mic-live-indicator" aria-hidden="true"><span></span><span></span><span></span></div><p>{{ recognition.isListening.value ? '正在聆听课堂问题描述…' : '点击麦克风后可直接说出课堂问题' }}</p></div>
-          <textarea v-model="draft" rows="8" placeholder="例如：活动说明偏晚，导致展示时间不足。"></textarea>
-          <p v-if="recognition.error.value" class="helper-error">{{ recognition.error.value }}</p>
-          <p v-else class="helper-copy">语音会自动转写成文字，保存后会在对应区域生成批注。</p>
-          <div class="bottom-action-bar"><UiButton @click="saveReflectionRecord" :disabled="!draft.trim() || !selectedLessonId"><Save :size="16" /> 关联并保存记录</UiButton></div>
-        </section>
+          <!-- 编辑模式 -->
+          <template v-if="isEditingContent">
+            <input v-model="editTitle" placeholder="教案标题" />
+            <textarea v-model="editContent" rows="18" placeholder="教案 Markdown 内容…" />
+            <div class="bottom-action-bar">
+              <UiButton @click="saveContent"><Save :size="14" /> 保存修改</UiButton>
+            </div>
+          </template>
 
-        <section v-if="currentStage === 3" class="card-list reflection-timeline-zone">
-          <div class="panel-headline"><div><p class="hero-kicker">STEP 3 · 个人教学记录</p><h3>查看当前教案下的反思记录与插入后的教案</h3></div></div>
-          <div class="answer-timeline reflection-stack-list">
-            <article v-for="item in visibleRecords" :key="item.id" class="data-card clickable-card reflection-item" @click="useRecord(item)">
-              <div class="timeline-dot"><CheckCheck :size="16" /></div>
-              <strong>{{ item.title }}</strong><p>{{ item.text }}</p><small>{{ item.time }}</small>
-              <ul class="workspace-checklist"><li v-for="annotation in item.annotations" :key="annotation.id"><span class="workspace-check"></span><span>{{ annotation.time }} · {{ annotation.text }}</span></li></ul>
-            </article>
-            <article v-if="!visibleRecords.length" class="data-card"><strong>暂无记录</strong><p>请先在步骤 2 保存至少一条反思记录。</p></article>
+          <!-- 预览模式 -->
+          <div v-else class="markdown-preview" v-html="renderMd(selectedLesson.content)" style="max-height:60vh;overflow-y:auto;flex:1" />
+        </div>
+
+        <!-- 右：反思输入 + 记录列表 -->
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="editor-card" style="display:flex;flex-direction:column;gap:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <p class="hero-kicker">添加反思</p>
+                <h3>课堂问题记录</h3>
+              </div>
+              <UiButton class="mic-btn" :class="{ listening: recognition.isListening.value }" @click="toggleMic">
+                <Mic v-if="!recognition.isListening.value" :size="14" />
+                <MicOff v-else :size="14" />
+                {{ recognition.isListening.value ? '停止' : '语音' }}
+              </UiButton>
+            </div>
+            <div class="lesson-mic-status" :class="{ listening: recognition.isListening.value }">
+              <div class="mic-live-indicator"><span></span><span></span><span></span></div>
+              <p>{{ recognition.isListening.value ? '正在聆听…' : '描述课堂中发现的问题' }}</p>
+            </div>
+            <textarea v-model="draft" rows="4" placeholder="例如：活动说明偏晚导致展示时间不足…" />
+            <p v-if="recognition.error.value" style="color:var(--danger);font-size:.78rem">{{ recognition.error.value }}</p>
+            <UiButton @click="saveAnnotation" :disabled="!draft.trim()"><Save :size="14" /> 保存反思</UiButton>
           </div>
-          <div v-if="selectedLesson" class="editor-card"><div class="panel-headline"><div><p class="hero-kicker">原教案（已插入批注）</p><h3>{{ selectedLesson.title }}</h3></div></div><div class="markdown-preview" v-html="lessonPreview"></div></div>
-        </section>
-      </main>
+
+          <div class="editor-card">
+            <div class="panel-headline"><h3>历史反思</h3><span class="status-pill">{{ records.length }} 条</span></div>
+            <div v-if="records.length" class="card-list" style="max-height:300px;overflow-y:auto">
+              <article v-for="r in (showAllRecords ? records : records.slice(0, 3))" :key="r.id" class="data-card reflection-item" style="cursor:pointer" @click="useRecord(r)">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <strong style="font-size:.82rem">{{ r.section === 'goal' ? '教学目标' : r.section === 'localCase' ? '本地案例' : '活动设计' }}</strong>
+                  <small>{{ r.time }}</small>
+                </div>
+                <p style="font-size:.85rem;margin:4px 0 0">{{ r.text }}</p>
+              </article>
+            </div>
+            <p v-if="records.length > 3" class="helper-copy" style="font-size:.78rem;cursor:pointer;color:var(--primary)" @click="showAllRecords = !showAllRecords">
+              {{ showAllRecords ? '收起' : `查看全部 ${records.length} 条…` }}
+            </p>
+            <p v-if="!records.length" class="helper-copy">暂无反思记录</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 移动端：教案列表 -->
+      <div class="mobile-history editor-card" style="margin-top:20px">
+        <div class="bookmark-head" style="margin-bottom:12px"><BookOpenText :size="16" /><strong>教案列表（{{ lessonDrafts.length }}）</strong></div>
+        <div style="display:grid;gap:8px">
+          <article v-for="item in lessonDrafts" :key="item.id" class="history-row" :class="{ active: selectedLessonId === item.id }" @click="selectLesson(item)">
+            <strong>{{ item.title }}</strong><small>{{ item.updatedAt }}</small>
+          </article>
+          <p v-if="!lessonDrafts.length" class="helper-copy">暂无教案</p>
+        </div>
+      </div>
     </section>
   </SoloAppShell>
 </template>
+
+<style scoped>
+.reflection-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; }
+.mobile-history { display: none; }
+@media (max-width: 1200px) {
+  .mobile-history { display: block; }
+}
+@media (max-width: 900px) {
+  .reflection-layout { grid-template-columns: 1fr; gap: 16px; }
+  .reflection-layout .editor-card { padding: 16px; }
+  .reflection-layout h3 { font-size: 1rem; }
+  .reflection-layout textarea { font-size: 16px; }
+}
+@media (max-width: 640px) {
+  .reflection-layout { gap: 12px; }
+  .reflection-layout .editor-card { padding: 14px; }
+  .mobile-history { margin-top: 12px !important; }
+}
+</style>

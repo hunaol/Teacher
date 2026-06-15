@@ -99,6 +99,7 @@ function getStatIcon(label) {
   return key ? statIconMap[key] : themeMeta.value.icon
 }
 
+const mobileMenuOpen = ref(false)
 const activeNav = computed(() => props.navItems.find((item) => item.path === active.value) ?? props.navItems[0] ?? null)
 const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g, '-'))
 </script>
@@ -107,6 +108,9 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
   <div class="app-shell product-shell app-shell-topbar" :class="[`theme-${theme}`, `route-${routeClass}`]">
     <header class="social-topbar">
       <div class="social-topbar-main">
+        <button class="mobile-menu-btn" @click="mobileMenuOpen = !mobileMenuOpen" aria-label="菜单">
+          <Menu :size="20" />
+        </button>
         <RouterLink to="/" class="social-brand">
           <div class="brand-mark brand-mark-icon">
             <component :is="themeMeta.icon" :size="18" />
@@ -152,10 +156,9 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
               </RouterLink>
             </div>
           </div>
-          <RouterLink to="/" class="app-sidebar-home social-home-link desktop-only-inline">
+          <button class="app-sidebar-home social-home-link desktop-only-inline" @click="$router.back()">
             <ArrowLeft :size="16" />
-            返回首页
-          </RouterLink>
+          </button>
           <button class="app-sidebar-home social-home-link desktop-only-inline logout-btn" @click="logout">
             <LogOut :size="16" />
             退出
@@ -172,15 +175,41 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
       </div>
     </header>
 
-    <div class="app-main topbar-main">
-      <main class="app-content topbar-content workspace-layout center-only-layout">
-        <aside class="workspace-leftbar desktop-only-side">
-          <slot name="left">
-            <div class="workspace-default-tools"></div>
-          </slot>
-        </aside>
+    <!-- 移动端侧边抽屉 -->
+    <Transition name="drawer">
+      <div v-if="mobileMenuOpen" class="mobile-drawer-overlay" @click.self="mobileMenuOpen = false">
+        <div class="mobile-drawer">
+          <div class="mobile-drawer-head">
+            <strong>{{ appName }}</strong>
+            <button class="mobile-drawer-close" @click="mobileMenuOpen = false">&times;</button>
+          </div>
+          <div class="mobile-drawer-nav">
+            <RouterLink
+              v-for="item in navItems" :key="item.path" :to="item.path"
+              class="mobile-drawer-item" :class="{ active: active === item.path }"
+              @click="mobileMenuOpen = false"
+            >
+              <component :is="getNavIcon(item.path)" :size="16" />
+              <span>{{ item.name }}</span>
+            </RouterLink>
+          </div>
+          <div class="mobile-drawer-tools">
+            <RouterLink v-for="t in toolLinks" :key="t.path" :to="t.path" class="mobile-drawer-item" @click="mobileMenuOpen = false">
+              <component :is="t.icon" :size="16" />
+              <span>{{ t.label }}</span>
+            </RouterLink>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
-        <section class="workspace-main">
+    <div class="app-main topbar-main">
+      <aside v-if="$slots.left" class="workspace-leftbar desktop-only-side">
+        <slot name="left" />
+      </aside>
+
+      <main class="workspace-main app-content">
+        <section class="workspace-main-inner">
           <header v-if="!hideMainHeader" class="app-header product-app-header social-app-header">
             <div class="social-app-copy">
               <div class="social-header-meta">
@@ -192,29 +221,16 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
               </div>
               <h1>{{ title }}</h1>
               <p v-if="subtitle" class="page-subtitle">{{ subtitle }}</p>
-
-              <section v-if="stats.length" class="stats-ribbon" aria-label="页面概览">
-                <UiCard v-for="item in stats" :key="item.label" class="stat-pill-card">
-                  <div class="stat-pill-top">
-                    <span class="stat-pill-icon">
-                      <component :is="getStatIcon(item.label)" :size="16" />
-                    </span>
-                    <span>{{ item.label }}</span>
-                  </div>
-                  <strong>{{ item.value }}</strong>
-                </UiCard>
-              </section>
             </div>
           </header>
 
           <slot />
         </section>
-
-        <aside class="workspace-rightbar desktop-only-side">
-          <slot name="right">
-          </slot>
-        </aside>
       </main>
+
+      <aside v-if="$slots.right" class="workspace-rightbar desktop-only-side">
+        <slot name="right" />
+      </aside>
     </div>
 
     <nav class="mobile-tabbar">
@@ -233,6 +249,47 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
 </template>
 
 <style scoped>
-@media (max-width: 768px) { .tools-dropdown-panel { right: -60px; width: 180px; } }
-@media (max-width: 480px) { .tools-dropdown-panel { right: -80px; width: 160px; } .tools-dropdown-item { padding: 8px 10px; font-size: .8rem; } }
+/* 确保内容区填充可用高度 */
+.workspace-main-inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* 移动端菜单按钮 */
+.mobile-menu-btn { display: none; background: none; border: none; color: var(--text); cursor: pointer; padding: 6px; border-radius: var(--radius-sm); }
+.mobile-menu-btn:hover { background: var(--bg-soft); }
+
+/* 移动端抽屉 */
+.mobile-drawer-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.4); backdrop-filter: blur(2px); }
+.mobile-drawer { position: fixed; top: 0; left: 0; bottom: 0; width: 280px; background: var(--surface); z-index: 101; display: flex; flex-direction: column; box-shadow: var(--shadow-xl); overflow-y: auto; }
+.mobile-drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 20px 16px; border-bottom: 1px solid var(--border-light); }
+.mobile-drawer-head strong { font-size: 1.1rem; }
+.mobile-drawer-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-soft); padding: 4px 8px; border-radius: var(--radius-sm); }
+.mobile-drawer-close:hover { background: var(--bg-soft); }
+.mobile-drawer-nav, .mobile-drawer-tools { padding: 12px; display: grid; gap: 4px; }
+.mobile-drawer-tools { border-top: 1px solid var(--border-light); }
+.mobile-drawer-item { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius-md); color: var(--text-soft); text-decoration: none; font-size: .9rem; transition: all .15s ease; }
+.mobile-drawer-item:hover { background: var(--bg-soft); color: var(--text); }
+.mobile-drawer-item.active { background: var(--primary-light); color: var(--primary-strong); font-weight: 600; }
+
+/* 抽屉动画 */
+.drawer-enter-active { transition: all .25s ease-out; }
+.drawer-leave-active { transition: all .2s ease-in; }
+.drawer-enter-from .mobile-drawer { transform: translateX(-100%); }
+.drawer-enter-to .mobile-drawer { transform: translateX(0); }
+.drawer-leave-from .mobile-drawer { transform: translateX(0); }
+.drawer-leave-to .mobile-drawer { transform: translateX(-100%); }
+.drawer-enter-from.mobile-drawer-overlay, .drawer-leave-to.mobile-drawer-overlay { opacity: 0; }
+.drawer-enter-to.mobile-drawer-overlay, .drawer-leave-from.mobile-drawer-overlay { opacity: 1; }
+
+@media (max-width: 1200px) {
+  .mobile-menu-btn { display: flex; align-items: center; }
+  .social-actions .social-home-link.desktop-only-inline:not(.logout-btn) { display: none !important; }
+  .tools-dropdown-panel { right: -60px; width: 180px; z-index: 60; }
+}
+@media (max-width: 480px) {
+  .tools-dropdown-panel { right: -80px; width: 160px; }
+  .tools-dropdown-item { padding: 8px 10px; font-size: .8rem; }
+}
 </style>

@@ -23,3 +23,7 @@ export function createReflection(data) {
 export function listReflections(lessonId) {
   return client.get('/reflections', { params: lessonId != null ? { lessonId } : {} })
 }
+
+export function deleteLesson(id) {
+  return client.delete(`/lessons/${id}`)
+}

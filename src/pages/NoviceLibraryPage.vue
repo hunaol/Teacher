@@ -50,8 +50,15 @@ function mapVideo(r) {
   }
 }
 
+/* 收藏持久化 */
+const FAV_KEY = 'novice_library_favorites'
+function loadFavorites() {
+  try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]')) } catch { return new Set() }
+}
+function saveFavorites(set) { localStorage.setItem(FAV_KEY, JSON.stringify([...set])) }
+
 const videos = ref([])
-const favorites = ref(new Set())
+const favorites = ref(loadFavorites())
 const watchedIds = ref(new Set())
 const watchCount = ref(0)
 const category = ref('热门')
@@ -105,7 +112,11 @@ async function loadVideos() {
   loading.value = true
   try {
     const list = await listVideos()
-    videos.value = list.map(mapVideo)
+    videos.value = list.map((v) => {
+      const video = mapVideo(v)
+      video.favorite = favorites.value.has(video.id)
+      return video
+    })
     if (videos.value.length > 0) {
       playingId.value = videos.value[0].id
     }
@@ -133,6 +144,7 @@ async function toggleFavorite(item) {
     try { await favoriteVideo(item.id) } catch { /* silent */ }
   }
   favorites.value = new Set(favorites.value)
+  saveFavorites(favorites.value)
   currentStage.value = 2
 }
 
@@ -157,7 +169,7 @@ async function submitQuestion() {
     })
     submitDone.value = true
     questionDraft.value = ''
-    setTimeout(() => { submitDone.value = false; qaOpen.value = false }, 1500)
+    setTimeout(() => { submitDone.value = false; qaOpen.value = false; router.push('/novice/qa') }, 800)
   } catch {
     // error
   } finally {

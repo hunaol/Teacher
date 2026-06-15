@@ -5,6 +5,25 @@ import { ElMessage } from 'element-plus'
 import 'element-plus/dist/index.css'
 import App from './App.vue'
 import './style.css'
+
+/* Element Plus 主题覆盖 */
+const elThemeStyle = document.createElement('style')
+elThemeStyle.textContent = `
+  :root {
+    --el-color-primary: #D98C52;
+    --el-color-primary-light-3: #E5B080;
+    --el-color-primary-light-5: #F0CDB0;
+    --el-color-primary-light-7: #F8E8D8;
+    --el-color-primary-light-8: #FCF3EB;
+    --el-color-primary-light-9: #FDF9F5;
+    --el-color-primary-dark-2: #C97838;
+    --el-border-radius-base: 10px;
+    --el-border-radius-small: 6px;
+    --el-border-radius-round: 20px;
+    --el-font-family: 'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+`
+document.head.appendChild(elThemeStyle)
 import HomePage from './pages/HomePage.vue'
 import SeniorLoginPage from './pages/SeniorLoginPage.vue'
 import SeniorLessonPage from './pages/SeniorLessonPage.vue'

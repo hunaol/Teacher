@@ -1,18 +1,18 @@
 <script setup>
-import { computed, ref, watch, onErrorCaptured } from 'vue'
-import { BookPlus, CheckCircle2, FileBadge2, Files, ListTodo, LockKeyhole, Search, Send, Telescope } from 'lucide-vue-next'
+import { computed, ref, watch, onMounted, onErrorCaptured } from 'vue'
+import { ArrowLeft, ArrowRight, CheckCircle2, FileText, ListTodo, Search, Send, Telescope, Upload, Eye, Trash2 } from 'lucide-vue-next'
+import { ElMessage } from 'element-plus'
 import SoloAppShell from '../components/SoloAppShell.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import UiCard from '../components/ui/UiCard.vue'
 import UiDialog from '../components/ui/UiDialog.vue'
 import UiProgress from '../components/ui/UiProgress.vue'
-import { listResources, likeResource, favoriteResource, createResource, listResourceComments, addResourceComment, listPendingAudit, reviewResource, watchResource } from '../api/resource'
-import { recommendTopic, listTopics, saveTopic } from '../api/research'
-import { listExperts, createAppointment, listAppointments, updateAppointment } from '../api/expert'
+import { listResources, createResource, watchResource } from '../api/resource'
+import { recommendTopic, listTopics, saveTopic, updateTopic, deleteTopic } from '../api/research'
 
 const appName = '骨干教师端'
 const pageTitle = '课题研究导航'
-const pageSubtitle = '基于教学表现生成结构化课题建议，并维护研究清单。'
+const pageSubtitle = '从教案资源中提炼研究课题'
 const theme = 'mid'
 const navItems = [
   { name: '诊断', path: '/mid/diagnosis', icon: '诊' },
@@ -24,93 +24,57 @@ const categoryList = ['全部', '语文', '数学', '综合实践', '科学']
 
 const docLibrary = ref([])
 const topicLibrary = ref([])
-const experts = ref([])
 const loadingDocs = ref(false)
-const ready = ref(false)
 const loadError = ref(false)
 
 onErrorCaptured((err) => {
-  console.error('MidResearchPage error:', err)
   loadError.value = true
   return false
 })
 
 const selectedDocIds = ref(new Set())
-const selectedTopic = ref({ title: '', meta: '', extra: '', sources: [], applicationDraft: '', transformed: false, createdAt: '' })
+const selectedTopic = ref({ title: '', meta: '', extra: '', sources: [], applicationDraft: '', createdAt: '' })
 const keyword = ref('')
 const category = ref('全部')
-const dataAuthorized = ref(false)
 const activeTopicId = ref(null)
 const currentStage = ref(1)
-const expertOpen = ref(false)
-const appointments = ref([])
-const appointmentsOpen = ref(false)
-const shareOpen = ref(false)
-const shareForm = ref({ title: '', summary: '', subject: '数学', grade: '', resourceType: 'lesson' })
-const commentsOpen = ref(false)
-const commentResourceId = ref(null)
-const comments = ref([])
-const commentDraft = ref('')
-const pendingAudit = ref([])
-const auditOpen = ref(false)
 
-const derivedStats = computed(() => {
-  const tl = Array.isArray(topicLibrary.value) ? topicLibrary.value : []
-  return [
-    { label: '在研课题', value: String(tl.length) },
-    { label: '本周推荐', value: '—' },
-    { label: '专家建议', value: '—' },
-  ]
-})
+const uploadOpen = ref(false)
+const uploadForm = ref({ title: '', summary: '', content: '', subject: '数学', grade: '' })
+const uploading = ref(false)
+const uploadError = ref('')
+const isGenerating = ref(false)
+
+const derivedStats = computed(() => [
+  { label: '在研课题', value: String(topicLibrary.value.length) },
+  { label: '可用教案', value: String(docLibrary.value.length) },
+  { label: '已选来源', value: String(selectedDocIds.value.size) },
+])
 
 const filteredDocs = computed(() => {
-  const value = keyword.value.trim()
-  const source = Array.isArray(docLibrary.value) ? docLibrary.value : []
-  return source.filter((item) => {
+  const v = keyword.value.trim()
+  const src = Array.isArray(docLibrary.value) ? docLibrary.value : []
+  return src.filter((item) => {
     if (!item) return false
-    const matchCategory = category.value === '全部' || item.subject === category.value
-    const matchKeyword = !value || `${item.title || ''}${item.subject || ''}${item.grade || ''}${item.school || ''}${item.summary || ''}`.includes(value)
-    return matchCategory && matchKeyword
+    const mCat = category.value === '全部' || item.subject === category.value
+    const mKw = !v || `${item.title || ''}${item.subject || ''}${item.grade || ''}`.includes(v)
+    return mCat && mKw
   })
 })
 
-const selectedDocs = computed(() => {
-  const source = Array.isArray(docLibrary.value) ? docLibrary.value : []
-  return source.filter((item) => item && selectedDocIds.value.has(item.id))
-})
+const selectedDocs = computed(() =>
+  (Array.isArray(docLibrary.value) ? docLibrary.value : []).filter((d) => d && selectedDocIds.value.has(d.id))
+)
 
-const activeTopic = computed(() => {
-  const tl = Array.isArray(topicLibrary.value) ? topicLibrary.value : []
-  return tl.find((item) => item && item.id === activeTopicId.value) ?? null
-})
+const activeTopicDetail = ref(null)
 
-const navProgress = computed(() => Math.round((currentStage.value / 4) * 100))
+const navProgress = computed(() => Math.round((currentStage.value / 3) * 100))
 
 const workflow = computed(() => [
-  { id: 1, title: '授权数据', hint: '先开启案例授权。' },
-  { id: 2, title: '选教案', hint: '从文档库选择来源。' },
-  { id: 3, title: '建课题', hint: '生成建议并创建课题。' },
-  { id: 4, title: '我的课题库', hint: '随时打开查看。' },
+  { id: 1, title: '选择教案来源', hint: '从资源库挑选或上传新教案' },
+  { id: 2, title: '编辑研究课题', hint: 'AI 推荐 + 手动完善' },
+  { id: 3, title: '我的课题库', hint: '查看管理所有课题' },
 ])
-
-const todoList = computed(() => [
-  { id: '1', text: '完成案例授权', done: dataAuthorized.value },
-  { id: '2', text: '选择教案来源', done: selectedDocIds.value.size > 0 },
-  { id: '3', text: '创建课题', done: topicLibrary.value.length > 0 },
-])
-
-const recommendationState = computed(() => dataAuthorized.value ? '已生成结构化推荐' : '等待授权')
-
-const topicSummary = computed(() => {
-  const sourceList = selectedTopic.value.sources?.length
-    ? selectedTopic.value.sources.map((s) => `- ${s}`).join('\n')
-    : '- 暂未选择'
-  return `${selectedTopic.value.title}\n\n${selectedTopic.value.meta}\n\n${selectedTopic.value.extra}\n\n来源教案：\n${sourceList}`
-})
-
-const topicSourcesStr = computed(() =>
-  Array.isArray(selectedTopic.value.sources) ? selectedTopic.value.sources.join(', ') : selectedTopic.value.sources,
-)
 
 function formatDate(iso) {
   if (!iso) return ''
@@ -121,391 +85,357 @@ function formatDate(iso) {
 async function loadDocLibrary() {
   loadingDocs.value = true
   try {
-    const params = { resourceType: 'lesson' }
+    const params = { resourceType: 'lesson', all: true }
     if (category.value !== '全部') params.subject = category.value
-    const list = await listResources(params)
-    if (!list || !Array.isArray(list)) {
-      docLibrary.value = []
-      return
-    }
-    docLibrary.value = list.filter(Boolean).map((r) => ({
-      ...r,
-      selected: selectedDocIds.value.has(r.id),
-    }))
-  } catch (e) {
-    console.error('Failed to load doc library:', e)
-    docLibrary.value = []
-  } finally {
-    loadingDocs.value = false
-  }
+    docLibrary.value = Array.isArray(await listResources(params)) ? (await listResources(params)).filter(Boolean) : []
+  } catch { docLibrary.value = [] } finally { loadingDocs.value = false }
 }
 
 async function loadTopics() {
   try {
     const list = await listTopics()
-    if (!list || !Array.isArray(list)) {
-      topicLibrary.value = []
-      return
-    }
-    topicLibrary.value = list.filter(Boolean).map((t) => ({
-      ...t,
-      sources: t.sources ? t.sources.split(',') : [],
-    }))
-    if (topicLibrary.value.length > 0 && !activeTopicId.value) {
-      activeTopicId.value = topicLibrary.value[0].id
-    }
-  } catch (e) {
-    console.error('Failed to load topics:', e)
-    topicLibrary.value = []
-  }
+    topicLibrary.value = Array.isArray(list) ? list.filter(Boolean).map((t) => ({ ...t, sources: t.sources ? t.sources.split(',') : [] })) : []
+  } catch { topicLibrary.value = [] }
 }
 
-async function loadExperts() {
-  try {
-    const list = await listExperts()
-    experts.value = Array.isArray(list) ? list : []
-  } catch (e) {
-    console.error('Failed to load experts:', e)
-    experts.value = []
-  }
-}
-
-watch(category, () => {
-  if (dataAuthorized.value) loadDocLibrary()
-})
+watch(category, () => loadDocLibrary())
 
 function goStage(id) { currentStage.value = id }
 
-function authorizeCases() {
-  dataAuthorized.value = true
-  loadDocLibrary()
-  loadTopics()
-  loadExperts()
-  currentStage.value = 2
-  if (!ready.value) ready.value = true
+async function submitUpload() {
+  if (!uploadForm.value.title.trim()) return
+  uploading.value = true; uploadError.value = ''
+  try {
+    const created = await createResource({ ...uploadForm.value, resourceType: 'lesson' })
+    if (created) {
+      docLibrary.value.unshift({ id: created.id, title: created.title, summary: created.summary, subject: uploadForm.value.subject, grade: uploadForm.value.grade, school: '', createdAt: new Date().toISOString(), likes: 0, favoriteCount: 0, commentCount: 0 })
+    }
+    uploadOpen.value = false
+    uploadForm.value = { title: '', summary: '', content: '', subject: '数学', grade: '' }
+    ElMessage.success('教案已上传')
+  } catch (e) { uploadError.value = e?.message || '上传失败' } finally { uploading.value = false }
 }
 
 function toggleDoc(item) {
-  if (selectedDocIds.value.has(item.id)) {
-    selectedDocIds.value.delete(item.id)
-  } else {
-    selectedDocIds.value.add(item.id)
-    try { watchResource(item.id) } catch { /* silent */ }
-  }
+  if (selectedDocIds.value.has(item.id)) selectedDocIds.value.delete(item.id)
+  else { selectedDocIds.value.add(item.id); try { watchResource(item.id) } catch { /* */ } }
   selectedDocIds.value = new Set(selectedDocIds.value)
 }
 
 async function buildRecommendation() {
   const sources = selectedDocs.value
-  const sourceTitles = sources.map((item) => item.title)
-  currentStage.value = 3
+  if (!sources.length) return ElMessage.warning('请先选择教案')
+  const sourceTitles = sources.map((s) => s.title)
+  isGenerating.value = true
+  currentStage.value = 2
   try {
-    const result = await recommendTopic({
-      teacherGoal: keyword.value || undefined,
-      sources: sourceTitles,
-    })
-    let rec = {}
-    try {
-      rec = JSON.parse(result.recommendationJson || '{}')
-    } catch { /* use empty */ }
-    selectedTopic.value = {
-      title: rec.title || `基于 ${sources.length} 篇教案的乡村课堂研究课题`,
-      meta: rec.meta || `推荐依据：系统分析后识别出高频研究主题。`,
-      extra: rec.extra || '',
-      sources: rec.sources || sourceTitles,
-      applicationDraft: rec.applicationDraft || '',
-      transformed: false,
-      createdAt: '',
-    }
-    if (result.savedTopic) {
-      topicLibrary.value.unshift({
-        ...result.savedTopic,
-        sources: result.savedTopic.sources ? result.savedTopic.sources.split(',') : [],
-      })
-    }
+    const result = await recommendTopic({ teacherGoal: keyword.value || undefined, sources: sourceTitles })
+    let rec = {}; try { rec = JSON.parse(result.recommendationJson || '{}') } catch { /* */ }
+    selectedTopic.value = { title: rec.title || `基于 ${sources.length} 篇教案的研究课题`, meta: rec.meta || '', extra: rec.extra || '', sources: rec.sources || sourceTitles, applicationDraft: rec.applicationDraft || '', transformed: false, createdAt: '' }
+    if (result.savedTopic) topicLibrary.value.unshift({ ...result.savedTopic, sources: result.savedTopic.sources ? result.savedTopic.sources.split(',') : [] })
   } catch {
-    selectedTopic.value = {
-      title: `基于 ${sources.length} 篇教案的乡村课堂研究课题`,
-      meta: `推荐依据：系统分析后识别出高频研究主题。`,
-      extra: '',
-      sources: sourceTitles,
-      applicationDraft: '',
-      transformed: false,
-      createdAt: '',
-    }
-  }
+    selectedTopic.value = { title: `基于 ${sources.length} 篇教案的研究课题`, meta: '', extra: '', sources: sourceTitles, applicationDraft: '', transformed: false, createdAt: '' }
+  } finally { isGenerating.value = false }
 }
 
 async function saveTopicToServer() {
+  if (!selectedTopic.value.title.trim()) return ElMessage.warning('请输入课题名称')
   try {
-    const saved = await saveTopic({
-      title: selectedTopic.value.title,
-      meta: selectedTopic.value.meta,
-      extra: selectedTopic.value.extra,
-      sources: Array.isArray(selectedTopic.value.sources)
-        ? selectedTopic.value.sources.join(',')
-        : selectedTopic.value.sources,
-      applicationDraft: selectedTopic.value.applicationDraft || '',
-    })
-    topicLibrary.value.unshift({
-      ...saved,
-      sources: saved.sources ? saved.sources.split(',') : [],
-    })
-    activeTopicId.value = saved.id
+    const saved = await saveTopic({ title: selectedTopic.value.title, meta: selectedTopic.value.meta, extra: selectedTopic.value.extra, sources: Array.isArray(selectedTopic.value.sources) ? selectedTopic.value.sources.join(',') : selectedTopic.value.sources, applicationDraft: selectedTopic.value.applicationDraft || '' })
+    const item = { ...saved, sources: saved.sources ? saved.sources.split(',') : [] }
+    topicLibrary.value.unshift(item)
+    activeTopicId.value = saved.id; activeTopicDetail.value = item
     selectedTopic.value.createdAt = saved.createdAt
-    currentStage.value = 4
-  } catch {
-    // error handled in UI
-  }
+    currentStage.value = 3
+    ElMessage.success('课题已保存')
+  } catch { ElMessage.error('保存失败') }
 }
 
 function openTopic(item) {
   activeTopicId.value = item.id
-  selectedTopic.value = {
-    ...item,
-    sources: Array.isArray(item.sources) ? item.sources : (item.sources ? item.sources.split(',') : []),
-    transformed: false,
-  }
-  currentStage.value = 4
+  const sources = Array.isArray(item.sources) ? item.sources : (typeof item.sources === 'string' ? item.sources.split(',') : [])
+  activeTopicDetail.value = { ...item, sources }
+  currentStage.value = 3
 }
 
-function transformResult() {
-  selectedTopic.value = { ...selectedTopic.value, transformed: true }
-  const index = topicLibrary.value.findIndex((item) => item.id === activeTopicId.value)
-  if (index >= 0) {
-    topicLibrary.value[index] = { ...topicLibrary.value[index], transformed: true }
-  }
+function removeSource(idx) {
+  const s = [...(selectedTopic.value.sources || [])]; s.splice(idx, 1)
+  selectedTopic.value = { ...selectedTopic.value, sources: s }
 }
 
-async function consultExpert() {
-  if (!activeTopicId.value || !experts.value.length) {
-    expertOpen.value = true
-    return
-  }
+/* 课题管理弹窗 */
+const topicManageOpen = ref(false)
+const editingTopicId = ref(null)
+const editTopicForm = ref({ title: '', meta: '', extra: '' })
+function openTopicManage() {
+  loadTopics()
+  topicManageOpen.value = true
+}
+
+function startEditTopic(item) {
+  editingTopicId.value = item.id
+  editTopicForm.value = { title: item.title || '', meta: item.meta || '', extra: item.extra || '' }
+}
+
+function cancelEdit() {
+  editingTopicId.value = null
+  editTopicForm.value = { title: '', meta: '', extra: '' }
+}
+
+async function saveEditTopic() {
+  if (!editingTopicId.value) return
   try {
-    await createAppointment({
-      expertId: experts.value[0].id,
-      topicId: activeTopicId.value,
-      title: selectedTopic.value.title,
-      question: selectedTopic.value.meta,
-    })
-  } catch {
-    // keep going, show preview anyway
-  }
-  expertOpen.value = true
+    await updateTopic(editingTopicId.value, editTopicForm.value)
+    const idx = topicLibrary.value.findIndex((t) => t.id === editingTopicId.value)
+    if (idx >= 0) {
+      topicLibrary.value[idx] = { ...topicLibrary.value[idx], ...editTopicForm.value }
+      topicLibrary.value = [...topicLibrary.value]
+      if (activeTopicDetail.value?.id === editingTopicId.value) {
+        activeTopicDetail.value = { ...activeTopicDetail.value, ...editTopicForm.value }
+      }
+    }
+    ElMessage.success('课题已更新')
+    cancelEdit()
+  } catch { ElMessage.error('更新失败') }
 }
 
-async function loadAppointments() {
-  try {
-    appointments.value = await listAppointments()
-    appointmentsOpen.value = true
-  } catch { /* error */ }
+async function handleDeleteTopic(id) {
+  try { await deleteTopic(id) } catch { /* backend may not support */ }
+  topicLibrary.value = topicLibrary.value.filter((t) => t.id !== id)
+  if (activeTopicId.value === id) { activeTopicId.value = null; activeTopicDetail.value = null }
+  ElMessage.success('课题已删除')
 }
 
-async function cancelAppointment(id) {
-  try {
-    await updateAppointment(id, { status: 'cancelled' })
-    appointments.value = appointments.value.filter((a) => a.id !== id)
-  } catch { /* error */ }
+function viewTopic(item) {
+  topicManageOpen.value = false
+  openTopic(item)
 }
 
-async function handleLike(id) { try { await likeResource(id); await loadDocLibrary() } catch { /* error */ } }
-async function handleFavorite(id) { try { await favoriteResource(id); await loadDocLibrary() } catch { /* error */ } }
-
-async function submitShare() {
-  if (!shareForm.value.title.trim()) return
-  try { await createResource(shareForm.value); shareOpen.value = false; await loadDocLibrary() } catch { /* error */ }
-}
-
-async function loadComments(id) {
-  commentResourceId.value = id
-  try { comments.value = await listResourceComments(id); commentsOpen.value = true } catch { /* error */ }
-}
-
-async function submitComment() {
-  if (!commentDraft.value.trim() || !commentResourceId.value) return
-  try { await addResourceComment(commentResourceId.value, { content: commentDraft.value.trim() }); commentDraft.value = ''; comments.value = await listResourceComments(commentResourceId.value) } catch { /* error */ }
-}
-
-async function loadPendingAudit() {
-  try { pendingAudit.value = await listPendingAudit(); auditOpen.value = true } catch { /* error */ }
-}
-
-async function approveResource(id) {
-  try { await reviewResource(id, 'approved'); pendingAudit.value = pendingAudit.value.filter((r) => r.id !== id) } catch { /* error */ }
-}
-
-ready.value = true
+onMounted(() => { loadDocLibrary(); loadTopics() })
 </script>
 
 <template>
-  <SoloAppShell :app-name="appName" :title="pageTitle" subtitle="" :stats="derivedStats" :nav-items="navItems" :theme="theme">
+  <SoloAppShell :app-name="appName" :title="pageTitle" :subtitle="pageSubtitle" :stats="derivedStats" :nav-items="navItems" :theme="theme">
     <template #left>
       <aside class="lesson-bookmark-sidebar">
         <div class="bookmark-card">
-          <div class="bookmark-head"><ListTodo :size="16" /><strong>使用顺序</strong></div>
-          <div class="bookmark-progress"><UiProgress :value="navProgress" label="当前步骤" /></div>
+          <div class="bookmark-head"><ListTodo :size="16" /><strong>研究流程</strong></div>
+          <div class="bookmark-progress"><UiProgress :value="navProgress" /></div>
           <button v-for="item in workflow" :key="item.id" type="button" class="bookmark-item" :class="{ active: currentStage === item.id }" @click="goStage(item.id)">
             <span class="bookmark-index">{{ item.id }}</span>
             <div><strong>{{ item.title }}</strong><p>{{ item.hint }}</p></div>
           </button>
         </div>
+
         <div class="bookmark-card">
-          <div class="bookmark-head"><CheckCircle2 :size="16" /><strong>工作清单</strong></div>
-          <article v-for="todo in todoList" :key="todo.id" class="todo-row" :class="{ done: todo.done }"><span class="todo-dot"></span><p>{{ todo.text }}</p></article>
+          <div class="bookmark-head"><FileText :size="16" /><strong>课题快捷入口</strong></div>
+          <article v-for="item in topicLibrary.slice(0, 6)" :key="item.id" class="history-row" :class="{ active: activeTopicId === item.id }" @click="openTopic(item)">
+            <strong>{{ item.title }}</strong><small>{{ formatDate(item.createdAt) }}</small>
+          </article>
+          <p v-if="!topicLibrary.length" class="helper-copy" style="font-size:.78rem">暂无课题</p>
         </div>
       </aside>
     </template>
 
-    <template #right>
-      <UiCard class="workspace-panel-card">
-        <div class="workspace-panel-head"><strong>我的课题库</strong><span class="header-channel">{{ (Array.isArray(topicLibrary) ? topicLibrary : []).length }} 项</span></div>
-        <div class="card-list">
-          <article v-for="item in (Array.isArray(topicLibrary) ? topicLibrary : []).slice(0, 4)" :key="item?.id ?? Math.random()" class="history-row" :class="{ active: activeTopicId === item.id }" @click="openTopic(item)">
-            <strong>{{ item?.title ?? '' }}</strong><small>{{ formatDate(item?.createdAt) }}</small>
-          </article>
-        </div>
-        <div class="bottom-action-bar" style="margin-top:8px">
-          <UiButton variant="secondary" @click="loadAppointments">我的预约</UiButton>
-        </div>
-      </UiCard>
-    </template>
+    <section class="feature-screen mid-research-archive-board" style="width:100%">
+      <div v-if="loadError" class="editor-card"><p>页面加载出错</p></div>
 
-    <section class="feature-screen mid-ops-board mid-research-archive-board">
-      <div v-if="loadError" class="editor-card">
-        <p>页面加载出错，请刷新重试。</p>
-      </div>
-      <template v-else>
-      <!-- 课题库快捷入口（移动端右边栏隐藏时可见） -->
-      <div v-if="topicLibrary.length && currentStage !== 4" class="editor-card topic-quick-bar mobile-only-topic-bar">
-        <div class="bottom-action-bar">
-          <span>课题库 {{ topicLibrary.length }} 项</span>
-          <UiButton variant="secondary" @click="currentStage = 4">查看课题库</UiButton>
+      <!-- ====== STEP 1 ====== -->
+      <section v-if="currentStage === 1">
+        <div class="editor-card" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div>
+              <p class="hero-kicker">教案资源库</p>
+              <h3>选择教案作为课题来源</h3>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <UiButton @click="openTopicManage"><Eye :size="14" /> 查看所有课题</UiButton>
+              <UiButton variant="primary" @click="uploadOpen = true"><Upload :size="14" /> 上传教案</UiButton>
+              <UiButton @click="buildRecommendation" :disabled="!selectedDocIds.size" :loading="isGenerating">
+                {{ isGenerating ? 'AI 分析中…' : '生成课题' }} <ArrowRight :size="14" />
+              </UiButton>
+            </div>
+          </div>
         </div>
-      </div>
-      <section v-if="currentStage === 1" class="editor-card">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 1</p><h3>先授权教学案例数据</h3></div><span class="status-pill"><Telescope :size="14" /> {{ recommendationState }}</span></div>
-        <div class="bottom-action-bar"><UiButton @click="authorizeCases"><LockKeyhole :size="16" /> 授权案例数据</UiButton></div>
-      </section>
 
-      <section v-if="currentStage === 2" class="editor-card">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 2</p><h3>选择教案来源</h3></div><label class="old-library-search"><Search :size="15" /><input v-model="keyword" placeholder="搜索教案标题 / 学校 / 年级" /></label></div>
+        <!-- 搜索栏 -->
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+          <label class="old-library-search" style="flex:1;min-width:180px">
+            <Search :size="15" /><input v-model="keyword" placeholder="搜索教案…" />
+          </label>
+          <span v-if="selectedDocIds.size" class="status-pill" style="background:var(--primary-light);color:var(--primary-strong);border-color:var(--primary)">
+            已选 {{ selectedDocIds.size }} 篇
+          </span>
+        </div>
         <div class="old-library-tags">
-          <button v-for="item in categoryList" :key="item" type="button" class="old-library-tag" :class="{ active: category === item }" @click="category = item">{{ item }}</button>
+          <button v-for="item in categoryList" :key="item" class="old-library-tag" :class="{ active: category === item }" @click="category = item">{{ item }}</button>
         </div>
+
+        <!-- 教案卡片 -->
         <p v-if="loadingDocs" class="helper-copy">加载中…</p>
-        <div class="old-library-grid">
-          <article v-for="item in filteredDocs" :key="item.id" class="old-doc-card" :class="{ active: selectedDocIds.has(item.id) }" @click="toggleDoc(item)">
-            <div class="old-doc-cover">教案</div>
-            <div class="old-doc-body"><strong>{{ item.title }}</strong><p>{{ item.summary }}</p><small>{{ item.subject }} ｜ {{ item.grade }} ｜ {{ item.school || '未知学校' }}</small><div style="margin-top:4px"><button class="choice-btn" @click.stop="handleLike(item.id)">👍 {{ item.likes || 0 }}</button><button class="choice-btn" @click.stop="handleFavorite(item.id)">⭐ {{ item.favoriteCount || 0 }}</button><button class="choice-btn" @click.stop="loadComments(item.id)">💬 {{ item.commentCount || 0 }}</button></div></div>
+        <div v-else class="old-library-grid">
+          <article v-for="item in filteredDocs" :key="item.id" class="old-doc-card research-doc-card" :class="{ active: selectedDocIds.has(item.id) }" @click="toggleDoc(item)">
+            <div class="old-doc-cover research-doc-cover">
+              <FileText :size="28" />
+              <span v-if="selectedDocIds.has(item.id)" class="research-check-badge">✓</span>
+            </div>
+            <div class="old-doc-body">
+              <strong>{{ item.title }}</strong>
+              <p style="font-size:.82rem">{{ item.summary || '暂无简介' }}</p>
+              <div class="research-doc-meta">
+                <span>{{ item.subject }}</span><span>{{ item.grade }}</span>
+                <span v-if="item.school">{{ item.school }}</span>
+              </div>
+            </div>
           </article>
-          <p v-if="!loadingDocs && !filteredDocs.length" class="helper-copy">暂无教案资源。</p>
-        </div>
-        <div class="bottom-action-bar">
-          <UiButton variant="secondary" @click="shareOpen = true">分享资源</UiButton>
-          <UiButton variant="secondary" @click="loadPendingAudit">待审核</UiButton>
-          <UiButton @click="buildRecommendation" :disabled="!selectedDocIds.size"><Files :size="16" /> 下一步</UiButton>
+          <p v-if="!loadingDocs && !filteredDocs.length" class="helper-copy" style="grid-column:1/-1;padding:32px">暂无教案，点击"上传教案"添加</p>
         </div>
       </section>
 
-      <section v-if="currentStage === 3" class="editor-card research-topic-editor-box">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 3</p><h3>创建课题</h3></div></div>
-        <div class="selected-source-list">
-          <article v-for="item in selectedDocs" :key="item.id" class="selected-source-row"><strong>{{ item.title }}</strong><small>{{ item.subject }} · {{ item.grade }}</small></article>
-          <article v-if="!selectedDocs.length" class="selected-source-row"><strong>未选择教案</strong></article>
+      <!-- ====== STEP 2 ====== -->
+      <section v-if="currentStage === 2">
+        <!-- 返回按钮 -->
+        <div style="margin-bottom:14px">
+          <UiButton variant="ghost" @click="currentStage = 1"><ArrowLeft :size="14" /> 返回重新选择教案</UiButton>
         </div>
-        <input v-model="selectedTopic.title" placeholder="请输入研究选题" />
-        <textarea v-model="selectedTopic.meta" rows="4"></textarea>
-        <textarea v-model="selectedTopic.extra" rows="5"></textarea>
-        <div class="preview-paper old-library-preview"><pre>{{ topicSummary }}</pre></div>
-        <div class="bottom-action-bar">
-          <UiButton variant="secondary" @click="consultExpert"><Send :size="16" /> 咨询专家</UiButton>
-          <UiButton variant="secondary" @click="transformResult"><BookPlus :size="16" /> 成果转化</UiButton>
-          <UiButton @click="saveTopicToServer"><FileBadge2 :size="16" /> 创建课题</UiButton>
+
+        <div class="editor-card">
+          <div class="panel-headline" style="margin-bottom:16px">
+            <div><p class="hero-kicker">编辑课题</p><h3>完善研究课题信息</h3></div>
+          </div>
+
+          <!-- 已选来源 -->
+          <div v-if="selectedDocs.length" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+            <span v-for="item in selectedDocs" :key="item.id" class="ui-tag ui-tag-primary" style="font-size:.78rem">
+              {{ item.title }}
+              <button @click="toggleDoc(item)" style="background:none;border:none;cursor:pointer;padding:0 2px;opacity:.6">&times;</button>
+            </span>
+          </div>
+
+          <div class="research-form">
+            <div class="profile-form-field">
+              <label>研究选题 <span style="color:var(--danger)">*</span></label>
+              <input v-model="selectedTopic.title" placeholder="例：乡村小学数学情境教学实践研究" />
+            </div>
+            <div class="profile-form-field">
+              <label>选题依据</label>
+              <textarea v-model="selectedTopic.meta" rows="3" placeholder="为什么要选这个课题？教学中发现了什么问题？"></textarea>
+            </div>
+            <div class="profile-form-field">
+              <label>研究计划</label>
+              <textarea v-model="selectedTopic.extra" rows="4" placeholder="怎么做？包括研究步骤、方法、预期成果…"></textarea>
+            </div>
+          </div>
+
+          <div class="bottom-action-bar" style="padding-top:14px;border-top:1px solid var(--border-light)">
+            <UiButton variant="secondary" @click="buildRecommendation" :loading="isGenerating">🔄 AI 重新推荐</UiButton>
+            <UiButton @click="saveTopicToServer"><FileText :size="14" /> 保存课题</UiButton>
+          </div>
         </div>
       </section>
 
-      <section v-if="currentStage === 4" class="editor-card">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 4</p><h3>我的课题库</h3></div></div>
-        <div class="my-topic-list">
-          <article v-for="item in topicLibrary" :key="item.id" class="my-topic-row" :class="{ active: activeTopicId === item.id }" @click="openTopic(item)">
-            <strong>{{ item.title }}</strong><small>{{ formatDate(item.createdAt) }}</small>
-          </article>
-          <article v-if="!topicLibrary.length" class="my-topic-row"><strong>暂无课题</strong></article>
+      <!-- ====== STEP 3 ====== -->
+      <section v-if="currentStage === 3">
+        <div style="margin-bottom:14px">
+          <UiButton variant="ghost" @click="currentStage = 1"><ArrowLeft :size="14" /> 返回资源库</UiButton>
+        </div>
+
+        <div class="editor-card" style="margin-bottom:16px">
+          <div class="panel-headline"><h3>我的课题库（{{ topicLibrary.length }}）</h3></div>
+          <div v-if="!topicLibrary.length" class="helper-copy" style="padding:40px">
+            <FileText :size="32" style="color:var(--text-faint);margin-bottom:12px" />
+            <p>还没有课题</p>
+            <UiButton variant="secondary" @click="currentStage = 1" style="margin-top:8px">去选择教案</UiButton>
+          </div>
+          <div v-else class="my-topic-list">
+            <article v-for="item in topicLibrary" :key="item.id" class="my-topic-row" :class="{ active: activeTopicId === item.id }" @click="openTopic(item)">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%">
+                <div style="flex:1;min-width:0">
+                  <strong>{{ item.title }}</strong>
+                  <p style="margin:4px 0 0;font-size:.8rem;color:var(--text-soft)">{{ item.meta ? item.meta.slice(0, 80) + (item.meta.length > 80 ? '…' : '') : '暂无依据' }}</p>
+                </div>
+                <small style="flex-shrink:0;margin-left:12px;margin-top:2px">{{ formatDate(item.createdAt) }}</small>
+              </div>
+            </article>
+          </div>
         </div>
 
         <!-- 选中课题详情 -->
-        <div v-if="activeTopic" class="editor-card topic-detail-card" style="margin-top:16px">
-          <div class="panel-headline">
-            <div><p class="hero-kicker">课题详情</p><h3>{{ activeTopic.title }}</h3></div>
-            <span class="status-pill" v-if="activeTopic.createdAt">{{ formatDate(activeTopic.createdAt) }}</span>
+        <div v-if="activeTopicDetail" class="editor-card" style="background:var(--bg-soft)">
+          <div class="panel-headline" style="margin-bottom:12px">
+            <h3>{{ activeTopicDetail.title }}</h3>
+            <span class="status-pill" v-if="activeTopicDetail.createdAt">{{ formatDate(activeTopicDetail.createdAt) }}</span>
           </div>
-          <div class="preview-paper">
-            <p v-if="activeTopic.meta"><strong>选题依据</strong><br/>{{ activeTopic.meta }}</p>
-            <p v-if="activeTopic.extra"><strong>研究计划</strong><br/>{{ activeTopic.extra }}</p>
-            <p v-if="topicSourcesStr"><strong>来源教案</strong><br/>{{ topicSourcesStr }}</p>
-            <p v-if="activeTopic.applicationDraft"><strong>申报书初稿</strong><br/>{{ activeTopic.applicationDraft }}</p>
-          </div>
-          <div class="bottom-action-bar">
-            <UiButton variant="secondary" @click="consultExpert"><Send :size="14" /> 咨询专家</UiButton>
-            <UiButton variant="secondary" @click="transformResult"><BookPlus :size="14" /> 成果转化</UiButton>
+          <div style="display:grid;gap:14px;font-size:.9rem;line-height:1.7">
+            <div v-if="activeTopicDetail.meta"><strong>选题依据</strong><p style="white-space:pre-wrap;margin-top:4px">{{ activeTopicDetail.meta }}</p></div>
+            <div v-if="activeTopicDetail.extra"><strong>研究计划</strong><p style="white-space:pre-wrap;margin-top:4px">{{ activeTopicDetail.extra }}</p></div>
+            <div v-if="activeTopicDetail.sources?.length"><strong>参考教案</strong><p style="margin-top:4px">{{ activeTopicDetail.sources.join('、') }}</p></div>
           </div>
         </div>
-        <p v-else-if="topicLibrary.length" class="helper-copy" style="margin-top:12px">点击上方课题查看详情</p>
       </section>
 
-      <UiDialog v-model:open="expertOpen" title="专家咨询草稿" description="">
-        <div class="preview-paper old-library-preview"><pre>{{ topicSummary }}</pre></div>
-      </UiDialog>
-
-      <UiDialog v-model:open="appointmentsOpen" title="我的专家预约" description="">
-        <div class="card-list">
-          <article v-for="a in appointments" :key="a.id" class="data-card">
-            <strong>{{ a.title }}</strong>
-            <small>{{ a.status }} · {{ a.expert?.name || '' }}</small>
-            <p>{{ a.question }}</p>
-            <div v-if="a.status === 'pending'" class="bottom-action-bar">
-              <UiButton variant="secondary" @click="cancelAppointment(a.id)">取消预约</UiButton>
-            </div>
-          </article>
-          <p v-if="!appointments.length">暂无预约</p>
-        </div>
-      </UiDialog>
-
-      <UiDialog v-model:open="shareOpen" title="分享资源" description="">
+      <!-- 上传弹窗 -->
+      <UiDialog v-model:open="uploadOpen" title="上传教案">
         <div class="login-form-clean">
-          <input v-model="shareForm.title" placeholder="资源标题" />
-          <input v-model="shareForm.summary" placeholder="简介" />
-          <input v-model="shareForm.subject" placeholder="学科" />
-          <input v-model="shareForm.grade" placeholder="年级" />
-          <UiButton @click="submitShare">提交分享</UiButton>
+          <div class="profile-form-field"><label>教案标题 <span style="color:var(--danger)">*</span></label><input v-model="uploadForm.title" placeholder="如：五年级《分数加减法》教案" /></div>
+          <div class="profile-form-field"><label>简介</label><textarea v-model="uploadForm.summary" rows="2" placeholder="简要描述…" /></div>
+          <div class="profile-form-field"><label>内容（可选）</label><textarea v-model="uploadForm.content" rows="3" placeholder="教案 Markdown 正文…" /></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="profile-form-field"><label>学科</label><input v-model="uploadForm.subject" placeholder="数学" /></div>
+            <div class="profile-form-field"><label>年级</label><input v-model="uploadForm.grade" placeholder="五年级" /></div>
+          </div>
+          <p v-if="uploadError" style="color:var(--danger);font-size:.82rem">{{ uploadError }}</p>
+          <UiButton @click="submitUpload" :loading="uploading" block>{{ uploading ? '上传中…' : '确认上传' }}</UiButton>
         </div>
       </UiDialog>
 
-      <UiDialog v-model:open="commentsOpen" title="评论" description="">
-        <div class="card-list">
-          <article v-for="c in comments" :key="c.id" class="data-card"><p>{{ c.content }}</p><small>{{ formatDate(c.createdAt) }}</small></article>
-          <p v-if="!comments.length">暂无评论</p>
+      <!-- 课题管理弹窗 -->
+      <UiDialog v-model:open="topicManageOpen" title="我的所有课题" size="lg">
+        <div v-if="!topicLibrary.length" class="helper-copy" style="padding:32px">
+          <p>还没有课题，请先选择教案并创建</p>
         </div>
-        <textarea v-model="commentDraft" rows="2" placeholder="写评论…" style="margin-top:8px"></textarea>
-        <div class="bottom-action-bar"><UiButton @click="submitComment">发表评论</UiButton></div>
-      </UiDialog>
-
-      <UiDialog v-model:open="auditOpen" title="待审核资源" description="">
-        <div class="card-list">
-          <article v-for="r in pendingAudit" :key="r.id" class="data-card">
-            <strong>{{ r.title }}</strong><small>{{ r.resourceType }} · {{ r.auditStatus }}</small>
-            <div class="bottom-action-bar"><UiButton @click="approveResource(r.id)">通过审核</UiButton></div>
+        <div v-else class="card-list" style="max-height:60vh;overflow-y:auto;overscroll-behavior:contain">
+          <article v-for="item in topicLibrary" :key="item.id" class="data-card" style="display:grid;gap:8px">
+            <!-- 查看/编辑模式 -->
+            <template v-if="editingTopicId === item.id">
+              <input v-model="editTopicForm.title" placeholder="课题名称" style="font-weight:600" />
+              <textarea v-model="editTopicForm.meta" rows="2" placeholder="选题依据" />
+              <textarea v-model="editTopicForm.extra" rows="2" placeholder="研究计划" />
+              <div style="display:flex;gap:6px">
+                <UiButton size="sm" @click="saveEditTopic">保存</UiButton>
+                <UiButton size="sm" variant="secondary" @click="cancelEdit">取消</UiButton>
+              </div>
+            </template>
+            <!-- 显示模式 -->
+            <template v-else>
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                <div style="flex:1;min-width:0">
+                  <strong>{{ item.title }}</strong>
+                  <p style="font-size:.82rem;margin:4px 0">{{ item.meta ? item.meta.slice(0, 100) : '暂无依据' }}</p>
+                  <small>{{ formatDate(item.createdAt) }}</small>
+                </div>
+                <div style="display:flex;gap:4px;flex-shrink:0">
+                  <button class="choice-btn" style="font-size:.75rem;min-height:28px;padding:0 10px" @click="startEditTopic(item)">编辑</button>
+                  <button class="choice-btn" style="font-size:.75rem;min-height:28px;padding:0 10px;color:var(--danger)" @click="handleDeleteTopic(item.id)">删除</button>
+                  <button class="choice-btn" style="font-size:.75rem;min-height:28px;padding:0 10px" @click="viewTopic(item)">查看</button>
+                </div>
+              </div>
+            </template>
           </article>
-          <p v-if="!pendingAudit.length">暂无待审核资源</p>
         </div>
       </UiDialog>
-      </template>
     </section>
   </SoloAppShell>
 </template>
 
 <style scoped>
-.mobile-only-topic-bar { display: none; }
-@media (max-width: 1280px) { .mobile-only-topic-bar { display: block; } }
+.research-doc-card { position: relative; }
+.research-doc-cover { position: relative; background: linear-gradient(135deg, var(--bg-soft), var(--primary-light)); display: flex; align-items: center; justify-content: center; color: var(--primary); }
+.research-check-badge { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 700; }
+.research-doc-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.research-doc-meta span { padding: 2px 8px; border-radius: var(--radius-full); background: var(--bg-soft); font-size: .72rem; color: var(--text-soft); }
+.research-form { display: grid; gap: 16px; }
+.research-form .profile-form-field label { display: block; font-size: .85rem; font-weight: 500; color: var(--text); margin-bottom: 6px; }
+.research-form input, .research-form textarea { width: 100%; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: .92rem; color: var(--text); background: var(--surface); outline: none; font-family: inherit; transition: border .2s, box-shadow .2s; }
+.research-form input:focus, .research-form textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(217,140,82,.12); }
 </style>
