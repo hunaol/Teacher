@@ -58,7 +58,7 @@ onMounted(load)
           <span v-if="profile?.county" class="profile-tag">{{ profile.county }}</span>
           <span v-if="profile?.subject" class="profile-tag">{{ profile.subject }}</span>
           <span v-if="profile?.grade" class="profile-tag">{{ profile.grade }}</span>
-          <span v-if="profile?.teacherType" class="profile-tag profile-tag-role">{{ profile.teacherType === 'senior' ? '资深教师' : profile.teacherType === 'mid' ? '骨干教师' : '新任教师' }}</span>
+          <span v-if="profile?.teacherType" class="profile-tag profile-tag-role">{{ profile.teacherType === 'senior' ? '老年资深教师' : profile.teacherType === 'mid' ? '中年骨干教师' : '新任青年教师' }}</span>
         </div>
       </div>
     </div>

@@ -9,7 +9,7 @@ import { useSeniorLessonStore } from '../composables/useSeniorLessonStore'
 
 const { drafts: savedDrafts, loading, generateLesson, buildDraftContent, addDraft, updateDraft, removeDraft } = useSeniorLessonStore()
 
-const appName = '资深教师端'
+const appName = '老年资深教师端'
 const pageTitle = '智能语音备课'
 const pageSubtitle = '输入教学需求，AI 自动生成结构化教案'
 const theme = 'senior'

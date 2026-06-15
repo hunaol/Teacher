@@ -2276,7 +2276,8 @@ textarea { resize: vertical; min-height: 80px; }
   .profile-avatar-fallback { width: 56px; height: 56px; font-size: 1.2rem; }
   .community-post-card { padding: 12px; }
   .dialog-panel, .ui-dialog-panel { padding: 16px; max-width: 98vw; }
-  .social-home-link.desktop-only-inline { display: none !important; }
+  .social-home-link.desktop-only-inline:not(.keep-mobile) { display: none !important; }
+  .social-home-link.keep-mobile { padding: 6px 8px; font-size: .7rem; }
   .ysd-ref-hero { padding: 24px 16px; gap: 16px; }
   .ysd-ref-hero-copy h1 { font-size: 1.3rem; }
   .ysd-ref-role-cover { height: 140px; }

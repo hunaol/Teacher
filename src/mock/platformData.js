@@ -6,21 +6,21 @@ export const homeIntro = {
 export const roleCards = [
   {
     key: 'senior',
-    name: '资深教师端',
+    name: '老年资深教师端',
     entry: '/senior/login',
     badge: '经验沉淀',
     description: '聚焦教案生成、课堂复盘与案例沉淀。',
   },
   {
     key: 'mid',
-    name: '骨干教师端',
+    name: '中年骨干教师端',
     entry: '/mid/login',
     badge: '教学进阶',
     description: '聚焦错题诊断、课堂互动与研究导航。',
   },
   {
     key: 'novice',
-    name: '新任教师端',
+    name: '新任青年教师端',
     entry: '/novice/login',
     badge: '成长加速',
     description: '聚焦经验获取、在线答疑与成长记录。',
@@ -28,10 +28,10 @@ export const roleCards = [
 ]
 
 export const seniorApp = {
-  appName: '资深教师端',
+  appName: '老年资深教师端',
   theme: 'senior',
   login: {
-    title: '欢迎进入资深教师端',
+    title: '欢迎进入老年资深教师端',
     subtitle: '围绕备课、复盘与案例沉淀，形成可持续增长的个人教学资产。',
     account: 'senior_teacher@demo.cn',
     highlights: ['智能语音备课', '随堂反思', '案例沉淀库', '多版本草稿'],
@@ -75,10 +75,10 @@ export const seniorApp = {
 }
 
 export const midApp = {
-  appName: '骨干教师端',
+  appName: '中年骨干教师端',
   theme: 'mid',
   login: {
-    title: '欢迎进入骨干教师端',
+    title: '欢迎进入中年骨干教师端',
     subtitle: '面向课堂优化、互动支持与课题研究，形成可执行的改进闭环。',
     account: 'mid_teacher@demo.cn',
     highlights: ['错题智能诊断', '课堂数字助教', '研究课题导航', '学生样本跟踪'],
@@ -170,10 +170,10 @@ export const midApp = {
 }
 
 export const noviceApp = {
-  appName: '新任教师端',
+  appName: '新任青年教师端',
   theme: 'novice',
   login: {
-    title: '欢迎进入新任教师端',
+    title: '欢迎进入新任青年教师端',
     subtitle: '帮助新教师快速建立稳定、可复制的课堂方法和成长记录。',
     account: 'novice_teacher@demo.cn',
     highlights: ['本地名师经验库', '在线答疑', '成长档案袋', '阶段报告'],

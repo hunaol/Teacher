@@ -20,7 +20,7 @@ const imageUrl = ref('')
 const imagePreview = ref('')
 const uploadingImage = ref(false)
 
-const appName = '新任教师端'
+const appName = '新任青年教师端'
 const pageTitle = '在线答疑'
 const pageSubtitle = '围绕真实课堂问题，发起提问、编辑记录并追踪处理状态。'
 const theme = 'novice'

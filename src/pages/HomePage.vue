@@ -20,9 +20,9 @@ onMounted(() => {
 
 /* 登录/注册 */
 const roleOptions = [
-  { key: 'senior', label: '资深教师', icon: Mic, color: '#D98C52' },
-  { key: 'mid', label: '骨干教师', icon: Bot, color: '#3B82F6' },
-  { key: 'novice', label: '新任教师', icon: GraduationCap, color: '#10B981' },
+  { key: 'senior', label: '老年资深教师', icon: Mic, color: '#D98C52' },
+  { key: 'mid', label: '中年骨干教师', icon: Bot, color: '#3B82F6' },
+  { key: 'novice', label: '新任青年教师', icon: GraduationCap, color: '#10B981' },
 ]
 const selectedRole = ref('')
 const isRegister = ref(false)

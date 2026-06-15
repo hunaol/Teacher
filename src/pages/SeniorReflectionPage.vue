@@ -11,7 +11,7 @@ import { useSeniorLessonStore } from '../composables/useSeniorLessonStore'
 
 const { drafts: lessonDrafts, addAnnotation, loadAnnotations, updateDraft } = useSeniorLessonStore()
 
-const appName = '资深教师端'
+const appName = '老年资深教师端'
 const pageTitle = '随堂反思'
 const pageSubtitle = '查看教案、添加反思批注、编辑教案内容'
 const theme = 'senior'
@@ -29,7 +29,7 @@ const showAllRecords = ref(false)
 const recognition = useSpeechRecognition()
 
 watch(() => recognition.liveText.value, (v) => {
-  if (recognition.isListening.value && v) draft.value = v
+  if (v) draft.value = v
 })
 
 watch(selectedLessonId, async (id) => {

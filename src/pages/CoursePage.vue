@@ -18,7 +18,7 @@ onMounted(load)
     <div class="page-hero"><div><h1>培训课程中心</h1><p>按教师发展阶段匹配的配套培训课程</p></div></div>
 
     <div style="display:flex;gap:8px;margin-bottom:24px">
-      <button v-for="a in [{v:'',l:'全部'},{v:'senior',l:'资深教师'},{v:'mid',l:'骨干教师'},{v:'novice',l:'新任教师'}]" :key="a.v" @click="audience=a.v;load()" :style="{padding:'8px 18px',borderRadius:'20px',border:'1px solid '+(audience===a.v?'#4f46e5':'#e2e8f0'),background:audience===a.v?'#eef2ff':'#fff',color:audience===a.v?'#4f46e5':'#64748b',fontSize:'.85rem',cursor:'pointer',fontWeight:audience===a.v?600:400}">{{ a.l }}</button>
+      <button v-for="a in [{v:'',l:'全部'},{v:'senior',l:'老年资深教师'},{v:'mid',l:'中年骨干教师'},{v:'novice',l:'新任青年教师'}]" :key="a.v" @click="audience=a.v;load()" :style="{padding:'8px 18px',borderRadius:'20px',border:'1px solid '+(audience===a.v?'#4f46e5':'#e2e8f0'),background:audience===a.v?'#eef2ff':'#fff',color:audience===a.v?'#4f46e5':'#64748b',fontSize:'.85rem',cursor:'pointer',fontWeight:audience===a.v?600:400}">{{ a.l }}</button>
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">

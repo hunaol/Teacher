@@ -17,9 +17,9 @@ async function gen(type) {
 }
 
 const reports = [
-  { type: 'experience', title: '教学经验册', desc: '汇总教案、反思和经验记录，生成结构化 PDF', audience: '资深教师 / 骨干教师', color: '#4f46e5', bg: '#eef2ff' },
-  { type: 'assessment', title: '考核材料包', desc: '整理课堂诊断、课题研究和成长记录，生成 Word 文档', audience: '骨干教师', color: '#d97706', bg: '#fef3c7' },
-  { type: 'growth', title: '成长报告', desc: '基于成长档案袋数据，生成新任教师发展报告 PDF', audience: '新任教师', color: '#059669', bg: '#d1fae5' },
+  { type: 'experience', title: '教学经验册', desc: '汇总教案、反思和经验记录，生成结构化 PDF', audience: '老年资深教师 / 中年骨干教师', color: '#4f46e5', bg: '#eef2ff' },
+  { type: 'assessment', title: '考核材料包', desc: '整理课堂诊断、课题研究和成长记录，生成 Word 文档', audience: '中年骨干教师', color: '#d97706', bg: '#fef3c7' },
+  { type: 'growth', title: '成长报告', desc: '基于成长档案袋数据，生成新任青年教师发展报告 PDF', audience: '新任青年教师', color: '#059669', bg: '#d1fae5' },
 ]
 </script>
 
