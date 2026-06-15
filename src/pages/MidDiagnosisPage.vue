@@ -180,12 +180,20 @@ const loading = ref(false)
 const manualOpen = ref(false)
 
 /** 手动录入诊断的表单数据 */
-const manualForm = ref({
-  studentName: '',
-  className: '',
-  subject: '数学',
-  topic: '',
-  questionText: '',
+const manualForm = ref({ studentName: '', className: '', subject: '数学', topic: '', questionText: '' })
+const manualSubmitting = ref(false)
+const manualResult = ref(null)
+
+const manualCompleteness = computed(() => {
+  const f = manualForm.value
+  const fields = [
+    { name: '学生姓名', filled: !!f.studentName.trim() },
+    { name: '班级', filled: !!f.className.trim() },
+    { name: '知识点', filled: !!f.topic.trim() },
+    { name: '题目描述', filled: !!f.questionText.trim() },
+  ]
+  const filled = fields.filter((f) => f.filled).length
+  return { fields, filled, total: fields.length, pct: Math.round((filled / fields.length) * 100) }
 })
 
 /** 班级热力图数据 */
@@ -494,6 +502,7 @@ async function saveStudent() {
  */
 async function submitManualDiagnosis() {
   if (!manualForm.value.studentName.trim()) return
+  manualSubmitting.value = true; manualResult.value = null
   try {
     await createDiagnosis({
       studentName: manualForm.value.studentName.trim(),
@@ -502,10 +511,12 @@ async function submitManualDiagnosis() {
       topic: manualForm.value.topic.trim() || undefined,
       questionText: manualForm.value.questionText.trim() || undefined,
     })
-    manualOpen.value = false
+    manualResult.value = { success: true, msg: `${manualForm.value.studentName} 的诊断已提交`, completeness: manualCompleteness.value.pct }
     manualForm.value = { studentName: '', className: '', subject: '数学', topic: '', questionText: '' }
     await loadStudents()
-  } catch { /* 提交失败时静默处理 */ }
+  } catch {
+    manualResult.value = { success: false, msg: '提交失败，请重试', completeness: 0 }
+  } finally { manualSubmitting.value = false }
 }
 
 /**
@@ -766,15 +777,31 @@ loadStudents()
         </div>
       </UiDialog>
 
-      <!-- 手动录入诊断弹窗：表单包含学生姓名、班级、学科、知识点、题目描述 -->
-      <UiDialog v-model:open="manualOpen" title="手动录入诊断" description="">
+      <!-- 手动录入诊断弹窗 -->
+      <UiDialog v-model:open="manualOpen" title="手动录入诊断">
+        <!-- 完成度指示 -->
+        <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:6px;border-radius:3px;background:var(--border-light);overflow:hidden">
+            <div :style="{ width: manualCompleteness.pct + '%', height:'100%', borderRadius:'3px', background: manualCompleteness.pct >= 75 ? '#10B981' : manualCompleteness.pct >= 50 ? '#F59E0B' : '#EF4444', transition:'width .3s' }"></div>
+          </div>
+          <span style="font-size:.75rem;color:var(--text-faint);white-space:nowrap">{{ manualCompleteness.filled }}/{{ manualCompleteness.total }} 项</span>
+        </div>
         <div class="login-form-clean">
-          <input v-model="manualForm.studentName" placeholder="学生姓名" />
-          <input v-model="manualForm.className" placeholder="班级（如六1班）" />
-          <input v-model="manualForm.subject" placeholder="学科" />
-          <input v-model="manualForm.topic" placeholder="知识点" />
-          <textarea v-model="manualForm.questionText" rows="3" placeholder="题目描述"></textarea>
-          <UiButton @click="submitManualDiagnosis">提交诊断</UiButton>
+          <div><label class="field-label">学生姓名 <span style="color:var(--danger)">*</span></label><input v-model="manualForm.studentName" placeholder="输入学生姓名" /></div>
+          <div><label class="field-label">班级</label><input v-model="manualForm.className" placeholder="如：六（1）班" /></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div><label class="field-label">学科</label><input v-model="manualForm.subject" placeholder="数学" /></div>
+            <div><label class="field-label">知识点</label><input v-model="manualForm.topic" placeholder="如：分数加减法" /></div>
+          </div>
+          <div><label class="field-label">题目描述</label><textarea v-model="manualForm.questionText" rows="3" placeholder="描述错题内容或学生错误表现…" /></div>
+          <!-- 提交结果 -->
+          <div v-if="manualResult" :style="{padding:'10px 14px',borderRadius:'8px',fontSize:'.84rem',background:manualResult.success?'var(--success-soft)':'var(--danger-soft)',color:manualResult.success?'var(--success)':'var(--danger)'}">
+            {{ manualResult.success ? '✓' : '✕' }} {{ manualResult.msg }}
+            <span v-if="manualResult.success"> · 完整度 {{ manualResult.completeness }}%</span>
+          </div>
+          <UiButton @click="submitManualDiagnosis" :loading="manualSubmitting" :disabled="!manualForm.studentName.trim()">
+            {{ manualSubmitting ? '提交中…' : '提交诊断' }}
+          </UiButton>
         </div>
       </UiDialog>
 

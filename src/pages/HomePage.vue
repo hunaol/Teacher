@@ -28,9 +28,6 @@ const roleMeta = {
         <p class="ysd-ref-kicker"><Sparkles :size="14" /> 乡村数学教师课堂教学多智能体赋能平台</p>
         <h1>云师道<span>·</span>MathAgent<br><span>数智化助力</span>乡村数学教育</h1>
         <p class="ysd-ref-hero-desc">基于 AI 大模型的教学辅助平台，为乡村数学教师提供从备课、诊断到成长的完整工作流。</p>
-        <div class="ysd-ref-actions">
-          <a href="#choose" class="ysd-ref-btn ysd-ref-btn-primary">选择教师端口 <ArrowRight :size="18" /></a>
-        </div>
       </div>
 
       <div class="ysd-ref-hero-visual">
@@ -47,24 +44,12 @@ const roleMeta = {
 
     <section id="choose" class="ysd-ref-choose">
       <div class="ysd-ref-choose-head">
-        <h2>选择您的教师端口</h2>
-        <p>系统根据您的教学阶段提供最匹配的功能</p>
+        <h2>教师登录</h2>
+        <p>进入后选择您的教师身份即可使用对应功能</p>
       </div>
-      <div class="ysd-ref-role-grid anim-stagger-children">
-        <RouterLink v-for="item in roleCards" :key="item.key" :to="item.entry" class="ysd-ref-role-card" :style="{ '--role-color': roleMeta[item.key].color }">
-          <div class="ysd-ref-role-bar"></div>
-          <div class="ysd-ref-role-body">
-            <div class="ysd-ref-role-top">
-              <span class="ysd-ref-role-icon"><component :is="roleMeta[item.key].icon" :size="20" /></span>
-              <strong>{{ roleMeta[item.key].title }}</strong>
-            </div>
-            <p>{{ roleMeta[item.key].scene }}</p>
-            <div class="ysd-ref-role-features">
-              <span v-for="feat in roleMeta[item.key].features" :key="feat" class="ysd-ref-role-feat">{{ feat }}</span>
-            </div>
-            <small class="ysd-ref-role-stat"><Users :size="13" /> {{ roleMeta[item.key].stat }}</small>
-            <span class="ysd-ref-enter">进入该端口 <ArrowRight :size="16" /></span>
-          </div>
+      <div style="display:flex;justify-content:center">
+        <RouterLink to="/senior/login" class="ysd-ref-btn ysd-ref-btn-primary" style="font-size:1.05rem;padding:16px 48px">
+          进入教师登录 <ArrowRight :size="20" />
         </RouterLink>
       </div>
     </section>

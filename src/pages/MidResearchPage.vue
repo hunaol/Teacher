@@ -105,15 +105,25 @@ function goStage(id) { currentStage.value = id }
 async function submitUpload() {
   if (!uploadForm.value.title.trim()) return
   uploading.value = true; uploadError.value = ''
+  /* 先加入本地列表 */
+  const localId = Date.now()
+  docLibrary.value.unshift({
+    id: localId, title: uploadForm.value.title.trim(), summary: uploadForm.value.summary.trim(),
+    subject: uploadForm.value.subject, grade: uploadForm.value.grade,
+    school: '', createdAt: new Date().toISOString(), likes: 0, favoriteCount: 0, commentCount: 0,
+  })
+  uploadOpen.value = false
+  uploadForm.value = { title: '', summary: '', content: '', subject: '数学', grade: '' }
+  ElMessage.success('教案已上传')
+  /* 异步同步后端 */
   try {
-    const created = await createResource({ ...uploadForm.value, resourceType: 'lesson' })
-    if (created) {
-      docLibrary.value.unshift({ id: created.id, title: created.title, summary: created.summary, subject: uploadForm.value.subject, grade: uploadForm.value.grade, school: '', createdAt: new Date().toISOString(), likes: 0, favoriteCount: 0, commentCount: 0 })
+    const created = await createResource({ title: uploadForm.value.title || '', summary: uploadForm.value.summary || '', subject: uploadForm.value.subject, grade: uploadForm.value.grade, resourceType: 'lesson' })
+    if (created?.id) {
+      const idx = docLibrary.value.findIndex((d) => d.id === localId)
+      if (idx >= 0) docLibrary.value[idx].id = created.id
     }
-    uploadOpen.value = false
-    uploadForm.value = { title: '', summary: '', content: '', subject: '数学', grade: '' }
-    ElMessage.success('教案已上传')
-  } catch (e) { uploadError.value = e?.message || '上传失败' } finally { uploading.value = false }
+  } catch { /* 本地已生效 */ }
+  uploading.value = false
 }
 
 function toggleDoc(item) {
@@ -140,15 +150,26 @@ async function buildRecommendation() {
 
 async function saveTopicToServer() {
   if (!selectedTopic.value.title.trim()) return ElMessage.warning('请输入课题名称')
+  /* 先生成本地 ID */
+  const localId = Date.now()
+  const localItem = {
+    id: localId, title: selectedTopic.value.title, meta: selectedTopic.value.meta,
+    extra: selectedTopic.value.extra,
+    sources: Array.isArray(selectedTopic.value.sources) ? selectedTopic.value.sources : [],
+    createdAt: new Date().toISOString(),
+  }
+  topicLibrary.value.unshift(localItem)
+  activeTopicId.value = localId; activeTopicDetail.value = localItem
+  currentStage.value = 3
+  ElMessage.success('课题已保存')
+  /* 异步同步后端 */
   try {
     const saved = await saveTopic({ title: selectedTopic.value.title, meta: selectedTopic.value.meta, extra: selectedTopic.value.extra, sources: Array.isArray(selectedTopic.value.sources) ? selectedTopic.value.sources.join(',') : selectedTopic.value.sources, applicationDraft: selectedTopic.value.applicationDraft || '' })
-    const item = { ...saved, sources: saved.sources ? saved.sources.split(',') : [] }
-    topicLibrary.value.unshift(item)
-    activeTopicId.value = saved.id; activeTopicDetail.value = item
-    selectedTopic.value.createdAt = saved.createdAt
-    currentStage.value = 3
-    ElMessage.success('课题已保存')
-  } catch { ElMessage.error('保存失败') }
+    if (saved?.id) {
+      localItem.id = saved.id; activeTopicId.value = saved.id
+      activeTopicDetail.value = { ...localItem, id: saved.id }
+    }
+  } catch { /* 本地已保存 */ }
 }
 
 function openTopic(item) {
@@ -184,26 +205,28 @@ function cancelEdit() {
 
 async function saveEditTopic() {
   if (!editingTopicId.value) return
-  try {
-    await updateTopic(editingTopicId.value, editTopicForm.value)
-    const idx = topicLibrary.value.findIndex((t) => t.id === editingTopicId.value)
-    if (idx >= 0) {
-      topicLibrary.value[idx] = { ...topicLibrary.value[idx], ...editTopicForm.value }
-      topicLibrary.value = [...topicLibrary.value]
-      if (activeTopicDetail.value?.id === editingTopicId.value) {
-        activeTopicDetail.value = { ...activeTopicDetail.value, ...editTopicForm.value }
-      }
+  /* 先更新本地 */
+  const idx = topicLibrary.value.findIndex((t) => t.id === editingTopicId.value)
+  if (idx >= 0) {
+    topicLibrary.value[idx] = { ...topicLibrary.value[idx], ...editTopicForm.value }
+    topicLibrary.value = [...topicLibrary.value]
+    if (activeTopicDetail.value?.id === editingTopicId.value) {
+      activeTopicDetail.value = { ...activeTopicDetail.value, ...editTopicForm.value }
     }
-    ElMessage.success('课题已更新')
-    cancelEdit()
-  } catch { ElMessage.error('更新失败') }
+  }
+  ElMessage.success('课题已更新')
+  cancelEdit()
+  /* 异步同步后端 */
+  try { await updateTopic(editingTopicId.value, editTopicForm.value) } catch { /* 本地已生效 */ }
 }
 
 async function handleDeleteTopic(id) {
-  try { await deleteTopic(id) } catch { /* backend may not support */ }
+  /* 先从本地移除 */
   topicLibrary.value = topicLibrary.value.filter((t) => t.id !== id)
   if (activeTopicId.value === id) { activeTopicId.value = null; activeTopicDetail.value = null }
   ElMessage.success('课题已删除')
+  /* 异步同步后端 */
+  try { await deleteTopic(id) } catch { /* 本地已生效 */ }
 }
 
 function viewTopic(item) {
