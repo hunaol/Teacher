@@ -18,7 +18,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const currentUserId = computed(() => auth.user?.value?.id)
 
-const appName = '新任教师端'
+const appName = '新任青年教师端'
 const pageTitle = '本地名师经验库'
 const pageSubtitle = '围绕乡村课堂常见问题，提供可收藏、可筛选的经验内容。'
 const theme = 'novice'
@@ -48,7 +48,7 @@ function mapVideo(r) {
     teacher: r.uploader || '',
     duration: r.duration || '',
     tags: r.tags ? r.tags.split(',').map((t) => t.trim()) : [],
-    cover: r.coverUrl || `https://picsum.photos/seed/video-${r.id}/960/540`,
+    cover: r.coverUrl || '',
     mediaUrl: r.mediaUrl || '',
     plays: formatPlays(r.viewCount),
     uploader: r.uploader || '',
@@ -161,18 +161,16 @@ const derivedStats = computed(() => ({
 }))
 
 const workflow = computed(() => [
-  { id: 1, title: '选视频', hint: '先点开一条经验视频。' },
-  { id: 2, title: '收藏或提问', hint: '看完后收藏或发问。' },
-  { id: 3, title: '提交问题', hint: '把问题发到答疑区。' },
+  { id: 1, title: '浏览视频', hint: '选择并播放经验视频' },
+  { id: 2, title: '收藏 & 提问', hint: '收藏优质视频并提交疑问' },
 ])
 
 const todoList = computed(() => [
-  { id: '1', text: '打开经验视频', done: !!playingId.value },
-  { id: '2', text: '完成收藏或提问', done: favorites.value.size > 0 || !!questionDraft.value },
-  { id: '3', text: '提交问题', done: false },
+  { id: '1', text: '观看经验视频', done: watchCount.value > 0 },
+  { id: '2', text: '收藏或提问', done: favorites.value.size > 0 || submitDone.value },
 ])
 
-const navProgress = computed(() => Math.round((currentStage.value / 3) * 100))
+const navProgress = computed(() => Math.round((currentStage.value / 2) * 100))
 
 const categories = ['热门', '已收藏', '课堂管理', '提问设计', '活动组织']
 
@@ -212,6 +210,7 @@ async function loadVideos() {
 async function playVideo(item) {
   playingId.value = item.id
   currentStage.value = 2
+  questionDraft.value = `我在看《${item.title}》时，想问：`
   try { await watchVideo(item.id); watchedIds.value.add(item.id); watchCount.value++ } catch { /* silent */ }
 }
 
@@ -233,8 +232,7 @@ async function toggleFavorite(item) {
 function openQaWithVideo(item) {
   playingId.value = item.id
   questionDraft.value = `我在看《${item.title}》时，想问：这个方法怎么迁移到自己的课堂？`
-  qaOpen.value = true
-  currentStage.value = 3
+  currentStage.value = 2
 }
 
 const submitting = ref(false)
@@ -260,7 +258,7 @@ async function submitQuestion() {
         await replyToQuestion(qid, { content: aiReply, role: '平台助理' })
       } catch { /* AI回复失败静默处理 */ }
     }
-    setTimeout(() => { submitDone.value = false; qaOpen.value = false; router.push('/novice/qa') }, 800)
+    setTimeout(() => { submitDone.value = false; router.push('/novice/qa') }, 600)
   } catch {
     // error
   } finally {
@@ -314,7 +312,7 @@ onMounted(() => { loadVideos() })
         <p v-if="loading" class="helper-copy">加载中…</p>
         <div v-else class="video-grid-feed">
           <article v-for="item in filteredVideos" :key="item.id" class="video-card-item">
-            <div class="video-card-cover-wrap" @click="openPlayer(item)"><img :src="item.cover" :alt="item.title" class="video-card-cover" /><span class="video-duration-tag"><CirclePlay :size="14" /> {{ item.duration }}</span></div>
+            <div class="video-card-cover-wrap" @click="playVideo(item)"><video v-if="item.mediaUrl" :src="item.mediaUrl" class="video-card-cover" preload="metadata" muted playsinline /><div v-else class="video-card-cover video-cover-fallback"><PlayCircle :size="28" /></div><span class="video-duration-tag"><CirclePlay :size="14" /> {{ item.duration || '视频' }}</span></div>
             <div class="video-card-body">
               <strong>{{ item.title }}</strong>
               <small>{{ item.uploader }} · {{ item.date }}</small>
@@ -329,22 +327,27 @@ onMounted(() => { loadVideos() })
       </section>
 
       <section v-if="currentStage === 2" class="editor-card">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 2</p><h3>{{ featuredVideo?.title || '' }}</h3></div><span class="status-pill"><TvMinimalPlay :size="14" /> {{ featuredVideo?.plays || '' }}</span></div>
+        <div class="panel-headline">
+          <div><p class="hero-kicker">视频详情</p><h3>{{ featuredVideo?.title || '' }}</h3></div>
+          <UiButton variant="ghost" size="sm" @click="currentStage = 1">返回列表</UiButton>
+        </div>
         <div class="video-hero-card single-step-video-card">
-          <div class="video-hero-cover-wrap"><img :src="featuredVideo?.cover" :alt="featuredVideo?.title" class="video-hero-cover" /><button class="video-play-mask" @click="openPlayer(featuredVideo)"><PlayCircle :size="28" /><span>播放</span></button></div>
+          <div class="video-hero-cover-wrap"><video v-if="featuredVideo?.mediaUrl" :src="featuredVideo.mediaUrl" class="video-hero-cover" preload="metadata" muted playsinline /><div v-else class="video-hero-cover video-cover-fallback"><PlayCircle :size="40" /></div><button class="video-play-mask" @click="openPlayer(featuredVideo)"><PlayCircle :size="28" /><span>播放</span></button></div>
           <div class="video-hero-info"><strong>{{ featuredVideo?.title }}</strong><small>{{ featuredVideo?.uploader }} · {{ featuredVideo?.date }}<span v-if="featuredVideo && watchedIds.has(featuredVideo.id)" style="color:var(--primary-strong);margin-left:8px">✓ 已学习</span></small></div>
         </div>
         <div class="bottom-action-bar">
           <UiButton variant="secondary" @click="toggleFavorite(featuredVideo)"><BookmarkCheck v-if="featuredVideo?.favorite" :size="16" /><Bookmark v-else :size="16" />{{ featuredVideo?.favorite ? '已收藏' : '收藏' }}</UiButton>
-          <UiButton @click="openQaWithVideo(featuredVideo)"><MessageCircleMore :size="16" /> 下一步</UiButton>
         </div>
-      </section>
 
-      <section v-if="currentStage === 3" class="editor-card">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 3</p><h3>提交问题</h3></div></div>
-        <textarea v-model="questionDraft" rows="5"></textarea>
-        <p v-if="submitDone" style="color:#059669;text-align:center;padding:8px">✓ 问题已提交，前往<a href="#/novice/qa" style="color:#4f46e5">答疑区</a>查看回复</p>
-        <div v-else class="bottom-action-bar"><UiButton @click="submitQuestion" :disabled="submitting"><Send :size="16" /> {{ submitting ? '提交中…' : '提交问题' }}</UiButton></div>
+        <!-- 提问区（直接在视频下方） -->
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border-light)">
+          <p class="hero-kicker">提出疑问</p>
+          <textarea v-model="questionDraft" rows="3" placeholder="关于这个视频，你有什么疑问？" style="margin-bottom:8px"></textarea>
+          <p v-if="submitDone" style="color:var(--success);text-align:center;padding:8px;font-size:.85rem">✓ 问题已提交，前往<a href="#/novice/qa" style="color:var(--primary);font-weight:600">答疑区</a>查看平台助理回复</p>
+          <div v-else class="bottom-action-bar" style="border-top:none;padding-top:0">
+            <UiButton @click="submitQuestion" :disabled="submitting || !questionDraft.trim()"><Send :size="14" /> {{ submitting ? '提交中…' : '提交问题' }}</UiButton>
+          </div>
+        </div>
       </section>
 
       <!-- 编辑视频弹窗 -->
@@ -437,4 +440,21 @@ onMounted(() => { loadVideos() })
 .file-drop-zone small { font-size: .75rem; color: var(--text-faint); }
 .upload-error { color: var(--danger); font-size: .82rem; text-align: center; margin: 0; }
 @media (max-width: 640px) { .upload-form-grid { grid-template-columns: 1fr; } }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .single-step-video-card { max-width: 100%; }
+  .video-hero-cover-wrap { aspect-ratio: 16/9; }
+  .video-hero-info strong { font-size: .9rem; }
+  .video-hero-info small { font-size: .75rem; }
+  .video-card-body strong { font-size: .85rem; }
+}
+.video-card-cover { background: linear-gradient(160deg, #e8e0d5, #f0e8dc); }
+.video-hero-cover { background: linear-gradient(160deg, #e8e0d5, #f5efe6); }
+.video-cover-fallback { display: flex; align-items: center; justify-content: center; color: rgba(0,0,0,.15); }
+.video-cover-fallback span { color: #b8a088; font-size: 1rem; font-weight: 600; }
+@media (max-width: 480px) {
+  .video-grid-feed { grid-template-columns: 1fr; }
+  .video-card-cover-wrap { aspect-ratio: 16/9; }
+}
 </style>

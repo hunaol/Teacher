@@ -50,7 +50,7 @@ async function handleRegister() {
     <section class="login-layout-panel">
       <div class="login-side login-side-senior">
         <div class="login-side-top">
-          <p class="page-eyebrow">资深教师端</p>
+          <p class="page-eyebrow">老年资深教师端</p>
           <span class="header-chip subtle">经验型工作流</span>
         </div>
         <h1>把课堂经验沉淀成可复用的教案与教学记录。</h1>

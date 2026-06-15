@@ -7,7 +7,7 @@ import thinkImg from '../assets/img/think.png'
 import replyImg from '../assets/img/reply.png'
 import { chat } from '../api/deepseek'
 
-const appName = '骨干教师端'
+const appName = '中年骨干教师端'
 const pageTitle = '智能数字人'
 const theme = 'mid'
 const navItems = [

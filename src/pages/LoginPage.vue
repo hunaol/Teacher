@@ -18,9 +18,9 @@ const pathRole = computed(() => {
 })
 
 const roleOptions = [
-  { key: 'senior', label: '资深教师', icon: Mic, desc: '经验沉淀 · 教案迭代 · 反思追踪', color: '#D98C52' },
-  { key: 'mid', label: '骨干教师', icon: Bot, desc: '课堂诊断 · AI 助教 · 课题研究', color: '#3B82F6' },
-  { key: 'novice', label: '新任教师', icon: GraduationCap, desc: '名师经验 · 在线答疑 · 成长档案', color: '#10B981' },
+  { key: 'senior', label: '老年资深教师', icon: Mic, desc: '经验沉淀 · 教案迭代 · 反思追踪', color: '#D98C52' },
+  { key: 'mid', label: '中年骨干教师', icon: Bot, desc: '课堂诊断 · AI 助教 · 课题研究', color: '#3B82F6' },
+  { key: 'novice', label: '新任青年教师', icon: GraduationCap, desc: '名师经验 · 在线答疑 · 成长档案', color: '#10B981' },
 ]
 
 const selectedRole = ref(pathRole.value || '')

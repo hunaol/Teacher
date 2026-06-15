@@ -47,7 +47,7 @@ async function handleRegister() {
     <section class="login-layout-panel">
       <div class="login-side login-side-mid">
         <div class="login-side-top">
-          <p class="page-eyebrow">骨干教师端</p>
+          <p class="page-eyebrow">中年骨干教师端</p>
           <span class="header-chip subtle">提升型工作流</span>
         </div>
         <h1>围绕课堂改进、互动支持和研究提升，形成更完整的教学闭环。</h1>

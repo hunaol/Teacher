@@ -6,7 +6,7 @@ import UiButton from '../components/ui/UiButton.vue'
 import UiDialog from '../components/ui/UiDialog.vue'
 import { getPortfolio, createEvent, listEvents, listFeedback, createFeedback } from '../api/growth'
 
-const appName = '新任教师端'
+const appName = '新任青年教师端'
 const pageTitle = '成长档案袋'
 const pageSubtitle = '自动汇总课堂实践、反馈与指导意见，并支持持续整理。'
 const theme = 'novice'
@@ -97,7 +97,7 @@ const recentEvents = computed(() =>
 )
 
 const achievementWall = computed(() => {
-  const lines = ['# 新任教师成长成就墙', '', `- 累计成长事件：${events.value.length}`]
+  const lines = ['# 新任青年教师成长成就墙', '', `- 累计成长事件：${events.value.length}`]
   if (feedbacks.value.length) {
     lines.push('', '## 名师点评')
     feedbacks.value.forEach((f, i) => {

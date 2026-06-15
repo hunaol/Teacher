@@ -42,7 +42,7 @@ const active = computed(() => route.path)
 const themeMeta = computed(() => {
   if (props.theme === 'senior') {
     return {
-      label: '资深教师端',
+      label: '老年资深教师端',
       hint: '经验沉淀工作台',
       icon: NotebookPen,
       checklist: ['今天完成 1 份教案草稿', '补充 1 条课堂反思记录', '整理本周案例素材'],
@@ -50,14 +50,14 @@ const themeMeta = computed(() => {
   }
   if (props.theme === 'mid') {
     return {
-      label: '骨干教师端',
+      label: '中年骨干教师端',
       hint: '诊断研究工作台',
       icon: BrainCircuit,
       checklist: ['处理 2 份错题样本', '完成 1 次数字助教脚本', '更新课题进展摘要'],
     }
   }
   return {
-    label: '新任教师端',
+    label: '新任青年教师端',
     hint: '成长学习工作台',
     icon: GraduationCap,
     checklist: ['学习 1 条名师经验', '提交 1 条在线提问', '更新成长档案条目'],
@@ -156,10 +156,10 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
               </RouterLink>
             </div>
           </div>
-          <button class="app-sidebar-home social-home-link desktop-only-inline" @click="$router.back()">
+          <button class="app-sidebar-home social-home-link desktop-only-inline keep-mobile" @click="$router.back()">
             <ArrowLeft :size="16" />
           </button>
-          <button class="app-sidebar-home social-home-link desktop-only-inline logout-btn" @click="logout">
+          <button class="app-sidebar-home social-home-link desktop-only-inline logout-btn keep-mobile" @click="logout">
             <LogOut :size="16" />
             退出
           </button>
@@ -217,7 +217,6 @@ const routeClass = computed(() => active.value.replace(/^\//, '').replace(/\//g,
                   <component :is="getNavIcon(activeNav?.path || '')" :size="14" />
                   {{ activeNav?.name || themeMeta.label }}
                 </UiBadge>
-                <span v-if="activeNav" class="header-channel">{{ activeNav.path }}</span>
               </div>
               <h1>{{ title }}</h1>
               <p v-if="subtitle" class="page-subtitle">{{ subtitle }}</p>

@@ -10,7 +10,7 @@ import UiProgress from '../components/ui/UiProgress.vue'
 import { listResources, createResource, watchResource } from '../api/resource'
 import { recommendTopic, listTopics, saveTopic, updateTopic, deleteTopic } from '../api/research'
 
-const appName = '骨干教师端'
+const appName = '中年骨干教师端'
 const pageTitle = '课题研究导航'
 const pageSubtitle = '从教案资源中提炼研究课题'
 const theme = 'mid'
@@ -105,24 +105,24 @@ function goStage(id) { currentStage.value = id }
 async function submitUpload() {
   if (!uploadForm.value.title.trim()) return
   uploading.value = true; uploadError.value = ''
-  /* 先加入本地列表 */
+  /* 保存值再重置 */
+  const payload = { title: uploadForm.value.title.trim(), summary: uploadForm.value.summary.trim(), subject: uploadForm.value.subject, grade: uploadForm.value.grade, resourceType: 'lesson' }
   const localId = Date.now()
   docLibrary.value.unshift({
-    id: localId, title: uploadForm.value.title.trim(), summary: uploadForm.value.summary.trim(),
-    subject: uploadForm.value.subject, grade: uploadForm.value.grade,
+    id: localId, title: payload.title, summary: payload.summary,
+    subject: payload.subject, grade: payload.grade,
     school: '', createdAt: new Date().toISOString(), likes: 0, favoriteCount: 0, commentCount: 0,
   })
   uploadOpen.value = false
   uploadForm.value = { title: '', summary: '', content: '', subject: '数学', grade: '' }
   ElMessage.success('教案已上传')
-  /* 异步同步后端 */
   try {
-    const created = await createResource({ title: uploadForm.value.title || '', summary: uploadForm.value.summary || '', subject: uploadForm.value.subject, grade: uploadForm.value.grade, resourceType: 'lesson' })
+    const created = await createResource(payload)
     if (created?.id) {
       const idx = docLibrary.value.findIndex((d) => d.id === localId)
       if (idx >= 0) docLibrary.value[idx].id = created.id
     }
-  } catch { /* 本地已生效 */ }
+  } catch { /* */ }
   uploading.value = false
 }
 
