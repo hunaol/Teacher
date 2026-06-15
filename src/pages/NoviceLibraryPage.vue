@@ -1,16 +1,22 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { Bookmark, BookmarkCheck, CheckCircle2, CirclePlay, ListTodo, MessageCircleMore, PlayCircle, Send, TvMinimalPlay } from 'lucide-vue-next'
 import SoloAppShell from '../components/SoloAppShell.vue'
 import UiButton from '../components/ui/UiButton.vue'
 import UiCard from '../components/ui/UiCard.vue'
 import UiDialog from '../components/ui/UiDialog.vue'
 import UiProgress from '../components/ui/UiProgress.vue'
-import { listVideos, favoriteVideo, watchVideo } from '../api/teaching-library'
-import { createQuestion } from '../api/qa'
+import { listVideos, favoriteVideo, watchVideo, uploadVideo, updateVideo, deleteVideo } from '../api/teaching-library'
+import { uploadFile } from '../api/file'
+import { createQuestion, replyToQuestion } from '../api/qa'
+import { chat } from '../api/deepseek'
+import { useAuthStore } from '../stores/authStore'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 
 const router = useRouter()
+const auth = useAuthStore()
+const currentUserId = computed(() => auth.user?.value?.id)
 
 const appName = '新任教师端'
 const pageTitle = '本地名师经验库'
@@ -37,11 +43,13 @@ function formatDate(iso) {
 function mapVideo(r) {
   return {
     id: r.id,
+    userId: r.userId,
     title: r.title || '',
     teacher: r.uploader || '',
     duration: r.duration || '',
     tags: r.tags ? r.tags.split(',').map((t) => t.trim()) : [],
     cover: r.coverUrl || `https://picsum.photos/seed/video-${r.id}/960/540`,
+    mediaUrl: r.mediaUrl || '',
     plays: formatPlays(r.viewCount),
     uploader: r.uploader || '',
     date: formatDate(r.createdAt),
@@ -67,6 +75,80 @@ const playingId = ref(null)
 const questionDraft = ref('')
 const qaOpen = ref(false)
 const loading = ref(false)
+
+/* 上传视频 */
+const uploadOpen = ref(false)
+const uploadForm = ref({ title: '', summary: '', category: '课堂管理' })
+const uploadFileEl = ref(null)
+const uploading = ref(false)
+const uploadError = ref('')
+
+const categoryOptions = ['课堂管理', '提问设计', '活动组织', '其他']
+
+async function handleUpload() {
+  const file = uploadFileEl.value?.files?.[0]
+  if (!file) { uploadError.value = '请选择视频文件'; return }
+  if (!uploadForm.value.title.trim()) { uploadError.value = '请输入标题'; return }
+  uploading.value = true; uploadError.value = ''
+  try {
+    const uploaded = await uploadFile(file, 'teaching_video')
+    await uploadVideo({
+      title: uploadForm.value.title.trim(),
+      summary: uploadForm.value.summary.trim(),
+      category: uploadForm.value.category,
+      mediaUrl: uploaded?.publicUrl || '',
+      coverUrl: '',
+      duration: '',
+    })
+    ElMessage.success('视频上传成功')
+    uploadOpen.value = false
+    uploadForm.value = { title: '', summary: '', category: '课堂管理' }
+    await loadVideos()
+  } catch (e) { uploadError.value = e?.message || '上传失败' }
+  finally { uploading.value = false }
+}
+
+/* 编辑/删除视频 */
+const editOpen = ref(false)
+const editingVideo = ref(null)
+const editForm = ref({ title: '', summary: '', category: '' })
+
+function openEdit(item) {
+  editingVideo.value = item
+  editForm.value = { title: item.title, summary: item.description || '', category: item.tags?.[0] || '其他' }
+  editOpen.value = true
+}
+
+async function handleEdit() {
+  if (!editingVideo.value) return
+  try {
+    await updateVideo(editingVideo.value.id, editForm.value)
+    ElMessage.success('视频已更新')
+    editOpen.value = false
+    await loadVideos()
+  } catch { ElMessage.error('更新失败') }
+}
+
+async function handleDeleteVideo(id) {
+  if (!confirm('确定删除该视频？')) return
+  try {
+    await deleteVideo(id)
+    ElMessage.success('视频已删除')
+    await loadVideos()
+  } catch { ElMessage.error('删除失败') }
+}
+
+/* 视频播放 */
+const videoPlayerOpen = ref(false)
+const playingVideoUrl = ref('')
+const playingVideoTitle = ref('')
+
+function openPlayer(item) {
+  playingVideoUrl.value = item.mediaUrl || ''
+  playingVideoTitle.value = item.title
+  videoPlayerOpen.value = true
+  try { watchVideo(item.id); watchedIds.value.add(item.id); watchCount.value++ } catch { /* */ }
+}
 
 const derivedStats = computed(() => ({
   title: pageTitle,
@@ -162,13 +244,22 @@ async function submitQuestion() {
   if (!questionDraft.value.trim()) return
   submitting.value = true
   try {
-    await createQuestion({
+    const created = await createQuestion({
       content: questionDraft.value.trim(),
       sourceType: 'teaching_library_video',
       sourceId: playingId.value,
     })
+    const qid = created?.id
+    const content = questionDraft.value.trim()
     submitDone.value = true
     questionDraft.value = ''
+    /* 平台助理 AI 自动回复 */
+    if (qid && content) {
+      try {
+        const aiReply = await chat({ prompt: content, style: '启发式教学', history: [] })
+        await replyToQuestion(qid, { content: aiReply, role: '平台助理' })
+      } catch { /* AI回复失败静默处理 */ }
+    }
     setTimeout(() => { submitDone.value = false; qaOpen.value = false; router.push('/novice/qa') }, 800)
   } catch {
     // error
@@ -213,15 +304,25 @@ onMounted(() => { loadVideos() })
 
     <section class="feature-screen novice-video-platform">
       <section v-if="currentStage === 1" class="editor-card">
-        <div class="panel-headline"><div><p class="hero-kicker">STEP 1</p><h3>先选一条经验视频</h3></div></div>
+        <div class="panel-headline">
+          <div><p class="hero-kicker">STEP 1</p><h3>先选一条经验视频</h3></div>
+          <UiButton variant="primary" @click="uploadOpen = true">上传视频</UiButton>
+        </div>
         <div class="video-channel-bar">
           <button v-for="item in categories" :key="item" class="video-chip" :class="{ active: category === item }" @click="category = item">{{ item }}</button>
         </div>
         <p v-if="loading" class="helper-copy">加载中…</p>
         <div v-else class="video-grid-feed">
           <article v-for="item in filteredVideos" :key="item.id" class="video-card-item">
-            <div class="video-card-cover-wrap" @click="playVideo(item)"><img :src="item.cover" :alt="item.title" class="video-card-cover" /><span class="video-duration-tag"><CirclePlay :size="14" /> {{ item.duration }}</span></div>
-            <div class="video-card-body"><strong>{{ item.title }}</strong><small>{{ item.uploader }}</small></div>
+            <div class="video-card-cover-wrap" @click="openPlayer(item)"><img :src="item.cover" :alt="item.title" class="video-card-cover" /><span class="video-duration-tag"><CirclePlay :size="14" /> {{ item.duration }}</span></div>
+            <div class="video-card-body">
+              <strong>{{ item.title }}</strong>
+              <small>{{ item.uploader }} · {{ item.date }}</small>
+              <div v-if="item.userId === currentUserId" style="display:flex;gap:4px;margin-top:4px">
+                <button class="choice-btn" style="font-size:.68rem;min-height:24px;padding:0 8px" @click.stop="openEdit(item)">编辑</button>
+                <button class="choice-btn" style="font-size:.68rem;min-height:24px;padding:0 8px;color:var(--danger)" @click.stop="handleDeleteVideo(item.id)">删除</button>
+              </div>
+            </div>
           </article>
           <p v-if="!filteredVideos.length" class="helper-copy">暂无经验视频。</p>
         </div>
@@ -230,7 +331,7 @@ onMounted(() => { loadVideos() })
       <section v-if="currentStage === 2" class="editor-card">
         <div class="panel-headline"><div><p class="hero-kicker">STEP 2</p><h3>{{ featuredVideo?.title || '' }}</h3></div><span class="status-pill"><TvMinimalPlay :size="14" /> {{ featuredVideo?.plays || '' }}</span></div>
         <div class="video-hero-card single-step-video-card">
-          <div class="video-hero-cover-wrap"><img :src="featuredVideo?.cover" :alt="featuredVideo?.title" class="video-hero-cover" /><button class="video-play-mask"><PlayCircle :size="28" /><span>播放</span></button></div>
+          <div class="video-hero-cover-wrap"><img :src="featuredVideo?.cover" :alt="featuredVideo?.title" class="video-hero-cover" /><button class="video-play-mask" @click="openPlayer(featuredVideo)"><PlayCircle :size="28" /><span>播放</span></button></div>
           <div class="video-hero-info"><strong>{{ featuredVideo?.title }}</strong><small>{{ featuredVideo?.uploader }} · {{ featuredVideo?.date }}<span v-if="featuredVideo && watchedIds.has(featuredVideo.id)" style="color:var(--primary-strong);margin-left:8px">✓ 已学习</span></small></div>
         </div>
         <div class="bottom-action-bar">
@@ -246,9 +347,94 @@ onMounted(() => { loadVideos() })
         <div v-else class="bottom-action-bar"><UiButton @click="submitQuestion" :disabled="submitting"><Send :size="16" /> {{ submitting ? '提交中…' : '提交问题' }}</UiButton></div>
       </section>
 
+      <!-- 编辑视频弹窗 -->
+      <UiDialog v-model:open="editOpen" title="编辑视频信息">
+        <div class="upload-form">
+          <div class="uf-field">
+            <label class="field-label">视频标题</label>
+            <input v-model="editForm.title" placeholder="视频标题" />
+          </div>
+          <div class="uf-field">
+            <label class="field-label">视频简介</label>
+            <textarea v-model="editForm.summary" rows="2" placeholder="简要描述…"></textarea>
+          </div>
+          <div class="uf-field">
+            <label class="field-label">视频分类</label>
+            <div class="category-pills">
+              <button v-for="c in categoryOptions" :key="c" type="button" class="cat-pill" :class="{ active: editForm.category === c }" @click="editForm.category = c">{{ c }}</button>
+            </div>
+          </div>
+          <UiButton @click="handleEdit" block variant="primary">保存修改</UiButton>
+        </div>
+      </UiDialog>
+
+      <!-- 视频播放器 -->
+      <UiDialog v-model:open="videoPlayerOpen" :title="playingVideoTitle" size="lg">
+        <div v-if="playingVideoUrl" style="position:relative;padding-top:56.25%;background:#000;border-radius:8px;overflow:hidden">
+          <video :src="playingVideoUrl" controls autoplay style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain" />
+        </div>
+        <p v-else class="helper-copy">视频地址无效</p>
+      </UiDialog>
+
       <UiDialog v-model:open="qaOpen" title="提问" description="">
         <div class="preview-paper"><p>{{ questionDraft }}</p></div>
+      </UiDialog>
+
+      <!-- 上传视频弹窗 -->
+      <UiDialog v-model:open="uploadOpen" title="上传教学视频" size="lg">
+        <div class="upload-form">
+          <div class="upload-form-grid">
+            <div class="uf-field">
+              <label class="field-label">视频标题 <span class="required">*</span></label>
+              <input v-model="uploadForm.title" placeholder="如：如何用方言讲解鸡兔同笼" />
+            </div>
+            <div class="uf-field">
+              <label class="field-label">视频分类 <span class="required">*</span></label>
+              <div class="category-pills">
+                <button v-for="c in categoryOptions" :key="c" type="button" class="cat-pill" :class="{ active: uploadForm.category === c }" @click="uploadForm.category = c">{{ c }}</button>
+              </div>
+            </div>
+          </div>
+          <div class="uf-field">
+            <label class="field-label">视频简介</label>
+            <textarea v-model="uploadForm.summary" rows="2" placeholder="简要描述视频内容和教学要点…"></textarea>
+          </div>
+          <div class="uf-field">
+            <label class="field-label">视频文件 <span class="required">*</span></label>
+            <div class="file-drop-zone" @click="uploadFileEl?.click()">
+              <input type="file" ref="uploadFileEl" accept="video/*" style="display:none" @change="uploadError = ''" />
+              <div class="file-drop-icon">📹</div>
+              <p>点击选择视频文件</p>
+              <small>支持 MP4、AVI、MOV 等格式</small>
+            </div>
+          </div>
+          <p v-if="uploadError" class="upload-error">{{ uploadError }}</p>
+          <UiButton @click="handleUpload" :loading="uploading" block size="lg" variant="primary">
+            {{ uploading ? '上传中…' : '确认上传' }}
+          </UiButton>
+        </div>
       </UiDialog>
     </section>
   </SoloAppShell>
 </template>
+
+<style scoped>
+.upload-form { display: grid; gap: 16px; }
+.upload-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.uf-field { display: grid; gap: 6px; }
+.uf-field input, .uf-field textarea { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: .9rem; outline: none; font-family: inherit; transition: border .2s; }
+.uf-field input:focus, .uf-field textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(217,140,82,.1); }
+.uf-field textarea { resize: vertical; }
+.required { color: var(--danger); }
+.category-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.cat-pill { padding: 8px 14px; border: 1px solid var(--border-light); border-radius: var(--radius-full); background: var(--surface); font-size: .82rem; cursor: pointer; transition: all .2s; color: var(--text-soft); }
+.cat-pill:hover { border-color: var(--primary); color: var(--primary); }
+.cat-pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.file-drop-zone { border: 2px dashed var(--border); border-radius: var(--radius-lg); padding: 28px; text-align: center; cursor: pointer; transition: all .2s; background: var(--bg-soft); }
+.file-drop-zone:hover { border-color: var(--primary); background: var(--primary-light); }
+.file-drop-icon { font-size: 2rem; margin-bottom: 8px; }
+.file-drop-zone p { font-size: .88rem; color: var(--text); margin: 0 0 4px; }
+.file-drop-zone small { font-size: .75rem; color: var(--text-faint); }
+.upload-error { color: var(--danger); font-size: .82rem; text-align: center; margin: 0; }
+@media (max-width: 640px) { .upload-form-grid { grid-template-columns: 1fr; } }
+</style>

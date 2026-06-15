@@ -5,7 +5,6 @@ const TOKEN_KEY = 'auth_token'
 const client = axios.create({
   baseURL: '/api',
   timeout: 30000,
-  headers: { 'Content-Type': 'application/json' },
 })
 
 client.interceptors.request.use((config) => {

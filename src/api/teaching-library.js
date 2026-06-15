@@ -11,3 +11,15 @@ export function favoriteVideo(id) {
 export function watchVideo(id) {
   return client.post(`/teaching-library/videos/${id}/watched`)
 }
+
+export function uploadVideo(data) {
+  return client.post('/teaching-library/videos', data)
+}
+
+export function updateVideo(id, data) {
+  return client.put(`/teaching-library/videos/${id}`, data)
+}
+
+export function deleteVideo(id) {
+  return client.delete(`/teaching-library/videos/${id}`)
+}
