@@ -38,7 +38,7 @@ async function doLogin() {
   if (!password.value) { error.value = '请输入密码'; return }
   if (!selectedRole.value) { error.value = '请选择身份'; return }
   try {
-    await login(username.value.trim(), password.value)
+    await login(username.value.trim(), password.value, selectedRole.value)
     const home = { senior: '/senior/lesson', mid: '/mid/diagnosis', novice: '/novice/library' }
     router.push(home[selectedRole.value] || '/')
   } catch (e) { error.value = e?.message || '登录失败' }

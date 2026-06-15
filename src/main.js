@@ -6,7 +6,6 @@ import 'element-plus/dist/index.css'
 import App from './App.vue'
 import './style.css'
 
-/* Element Plus 主题覆盖 */
 const elThemeStyle = document.createElement('style')
 elThemeStyle.textContent = `
   :root {
@@ -24,6 +23,7 @@ elThemeStyle.textContent = `
   }
 `
 document.head.appendChild(elThemeStyle)
+
 import HomePage from './pages/HomePage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import SeniorLessonPage from './pages/SeniorLessonPage.vue'
@@ -45,10 +45,6 @@ import { useAuthStore } from './stores/authStore'
 
 const PUBLIC_PATHS = ['/', '/choose', '/senior/login', '/mid/login', '/novice/login']
 
-function loginPath(prefix) {
-  return `/${prefix}/login`
-}
-
 const ROLE_HOME = {
   senior: '/senior/lesson',
   mid: '/mid/diagnosis',
@@ -59,6 +55,35 @@ const ROLE_ROUTES = {
   senior: ['/senior/lesson', '/senior/reflection'],
   mid: ['/mid/diagnosis', '/mid/avatar', '/mid/research'],
   novice: ['/novice/library', '/novice/qa', '/novice/portfolio'],
+}
+
+function loginPath(prefix) {
+  return `/${prefix}/login`
+}
+
+function routeRole(path) {
+  const prefix = path.split('/')[1]
+  return ROLE_HOME[prefix] ? prefix : ''
+}
+
+function teacherTypesOf(user) {
+  if (!user) return []
+  if (Array.isArray(user.teacherTypes) && user.teacherTypes.length) {
+    return user.teacherTypes
+  }
+  return user.teacherType ? [user.teacherType] : []
+}
+
+function hasTeacherType(user, teacherType) {
+  return teacherTypesOf(user).includes(teacherType)
+}
+
+function currentTeacherType(user) {
+  const types = teacherTypesOf(user)
+  if (user?.teacherType && types.includes(user.teacherType)) {
+    return user.teacherType
+  }
+  return types[0] || ''
 }
 
 const router = createRouter({
@@ -97,35 +122,40 @@ useAuthStore().fetchUser()
 
 router.beforeEach((to) => {
   const { isAuthenticated, user } = useAuthStore()
+  const targetRole = routeRole(to.path)
 
   if (PUBLIC_PATHS.includes(to.path)) {
     if (isAuthenticated.value && to.path.includes('/login')) {
-      const role = user.value?.teacherType
-      if (role && ROLE_HOME[role]) {
-        return ROLE_HOME[role]
+      if (!user.value) {
+        return true
       }
-      return '/'
+      if (targetRole && hasTeacherType(user.value, targetRole)) {
+        return ROLE_HOME[targetRole]
+      }
+      return true
     }
     return true
   }
 
   if (!isAuthenticated.value) {
-    const prefix = to.path.split('/')[1]
-    const target = ROLE_HOME[prefix]
-    return target ? loginPath(prefix) : '/'
+    return targetRole ? loginPath(targetRole) : '/'
   }
 
-  const role = user.value?.teacherType
-  if (role) {
-    const prefix = to.path.split('/')[1]
-    if (ROLE_ROUTES[role] && !ROLE_ROUTES[role].includes(to.path)) {
-      const otherRole = Object.keys(ROLE_ROUTES).find(
-        (r) => r !== role && ROLE_ROUTES[r].includes(to.path),
-      )
-      if (otherRole) {
-        ElMessage.warning('您没有权限访问该页面，已返回首页')
-        return ROLE_HOME[role]
-      }
+  if (!user.value) {
+    return true
+  }
+
+  if (targetRole && !hasTeacherType(user.value, targetRole)) {
+    ElMessage.warning('当前账号未注册该教师身份，请先登录或注册该端身份')
+    return loginPath(targetRole)
+  }
+
+  const role = currentTeacherType(user.value)
+  if (role && ROLE_ROUTES[role] && !ROLE_ROUTES[role].includes(to.path)) {
+    const otherRole = Object.keys(ROLE_ROUTES).find((item) => ROLE_ROUTES[item].includes(to.path))
+    if (otherRole && !hasTeacherType(user.value, otherRole)) {
+      ElMessage.warning('当前账号未注册该教师身份，请先登录或注册该端身份')
+      return loginPath(otherRole)
     }
   }
 

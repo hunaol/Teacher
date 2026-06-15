@@ -17,10 +17,10 @@ function setToken(value) {
   }
 }
 
-async function login(username, password) {
+async function login(username, password, teacherType) {
   loading.value = true
   try {
-    const data = await loginApi(username, password)
+    const data = await loginApi(username, password, teacherType)
     setToken(data.token)
     user.value = data.user
     return data

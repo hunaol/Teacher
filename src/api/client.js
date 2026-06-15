@@ -7,10 +7,24 @@ const client = axios.create({
   timeout: 30000,
 })
 
+const TEACHER_TYPES = ['senior', 'mid', 'novice']
+
+function currentTeacherType() {
+  const hash = window.location.hash || ''
+  const path = (hash.startsWith('#') ? hash.slice(1) : hash).split('?')[0]
+  const prefix = path.split('/')[1]
+  return TEACHER_TYPES.includes(prefix) ? prefix : ''
+}
+
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY)
+  config.headers = config.headers || {}
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
+  }
+  const teacherType = currentTeacherType()
+  if (teacherType) {
+    config.headers['X-Teacher-Type'] = teacherType
   }
   return config
 })

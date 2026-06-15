@@ -22,7 +22,7 @@ async function handleLogin() {
     return
   }
   try {
-    await login(username.value.trim(), password.value)
+    await login(username.value.trim(), password.value, 'senior')
     router.push('/senior/lesson')
   } catch (e) {
     loginError.value = e.message || '登录失败，请重试'

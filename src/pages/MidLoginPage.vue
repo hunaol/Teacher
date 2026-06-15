@@ -22,7 +22,7 @@ async function handleLogin() {
     return
   }
   try {
-    await login(username.value.trim(), password.value)
+    await login(username.value.trim(), password.value, 'mid')
     router.push('/mid/diagnosis')
   } catch (e) {
     loginError.value = e.message || '登录失败，请重试'
