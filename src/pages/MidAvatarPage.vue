@@ -29,14 +29,6 @@ const avatarImg = computed(() => statusList.find((s) => s.key === avatarStatus.v
 const activeStyle = ref('启发式教学')
 const styles = ['启发式教学', '故事化教学', '互动教学', '考试冲刺']
 
-/* ==================== 教学案例 ==================== */
-const teachingCases = [
-  { title: '线段与射线', desc: '直线、线段与射线的区别与联系', prompt: '请帮我设计一个关于线段与射线的课堂讲解方案。' },
-  { title: '分数概念教学', desc: '分数的意义与基本性质', prompt: '如何向学生讲解分数的概念？请设计一个互动教学方案。' },
-  { title: '勾股定理讲解', desc: '勾股定理的证明与应用', prompt: '请帮我设计勾股定理的课堂讲解，包含证明演示和生活实例。' },
-  { title: '课堂互动设计', desc: '有效课堂提问与互动策略', prompt: '如何在数学课堂中设计有效的师生互动环节？' },
-]
-
 /* ==================== 对话区域 ==================== */
 const inputText = ref('')
 const allMessages = ref({})
@@ -65,11 +57,7 @@ const derivedStats = computed(() => [
   { label: '数字人状态', value: statusList.find((s) => s.key === avatarStatus.value)?.label ?? '—' },
 ])
 
-/* ==================== 交互方法（预留接口） ==================== */
-function selectCase(item) {
-  inputText.value = item.prompt
-}
-
+/* ==================== 交互方法 ==================== */
 async function handleSend() {
   const text = inputText.value.trim()
   if (!text || sending.value) return
@@ -170,20 +158,6 @@ function scrollToBottom() {
               <h3>输入教学问题获取课堂讲解建议</h3>
             </div>
           </div>
-        </div>
-
-        <!-- 教学案例网格 -->
-        <div class="cases-grid">
-          <button
-            v-for="item in teachingCases"
-            :key="item.title"
-            class="editor-card case-card"
-            @click="selectCase(item)"
-          >
-            <strong>{{ item.title }}</strong>
-            <small>{{ item.desc }}</small>
-            <span class="case-arrow">点击使用 →</span>
-          </button>
         </div>
 
         <!-- 风格对话标签 -->
@@ -353,19 +327,6 @@ function scrollToBottom() {
 /* ═══════════════ 右侧：聊天工作区 ═══════════════ */
 .right-title-card { flex-shrink: 0; }
 
-.cases-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex-shrink: 0; }
-.case-card {
-  padding: 16px; cursor: pointer; text-align: left;
-  display: flex; flex-direction: column; gap: 6px;
-  border: 1px solid var(--border-light); background: var(--surface);
-  border-radius: var(--radius-md); transition: all .2s;
-  font: inherit; color: var(--text);
-}
-.case-card:hover { border-color: var(--primary); box-shadow: var(--shadow); transform: translateY(-2px); }
-.case-card strong { font-size: .92rem; }
-.case-card small { color: var(--text-soft); font-size: .8rem; line-height: 1.5; }
-.case-arrow { color: var(--primary-strong); font-size: .75rem; font-weight: 500; }
-
 .style-chat-tabs { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
 .style-chat-tabs .choice-btn { font-size: .78rem; min-height: 32px; padding: 0 12px; }
 .style-msg-count {
@@ -442,14 +403,12 @@ function scrollToBottom() {
   .teaching-style-card { padding: 12px; }
   .style-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
   .style-item-btn { font-size: .76rem; min-height: 36px; }
-  .cases-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
 }
 
 /* 平板 */
 @media (max-width: 600px) {
   .avatar-left { grid-template-columns: 1fr; }
   .avatar-stage { width: 168px; height: 198px; margin: 0 auto; }
-  .cases-grid { grid-template-columns: 1fr; }
   .chat-card { min-height: 240px; padding: 14px; }
 }
 
