@@ -38,3 +38,15 @@ export function listDiagnoses() {
 export function getHeatmap(className, days) {
   return client.get('/diagnoses/heatmap', { params: { className, days } })
 }
+
+export function getTrend() {
+  return client.get('/diagnoses/trend')
+}
+
+export function updateDiagnosis(id, data) {
+  return client.put(`/diagnoses/${id}`, data)
+}
+
+export function deleteDiagnosis(id) {
+  return client.delete(`/diagnoses/${id}`)
+}

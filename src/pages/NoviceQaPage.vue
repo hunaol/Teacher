@@ -196,15 +196,41 @@ function startReply(id) { replyingId.value = id; replyDraft.value = '' }
 
 async function submitReply(id) {
   if (!replyDraft.value.trim()) return
+  const userReply = replyDraft.value.trim()
+  replyDraft.value = ''
+  replyingId.value = null
+  try { await replyToQuestion(id, { content: userReply }) } catch { /* */ }
+  await loadQuestions()
+  /* 平台助理自动跟进回复 */
+  aiReplying.value = true
   try {
-    await replyToQuestion(id, { content: replyDraft.value.trim() })
-    replyDraft.value = ''
-    replyingId.value = null
+    const q = records.value.find((r) => r.id === id)
+    const history = (q?.comments || []).map((c) => ({ role: c.role === '平台助理' ? 'assistant' : 'user', content: c.text }))
+    const aiReply = await chat({ prompt: userReply, style: '启发式教学', history })
+    await replyToQuestion(id, { content: aiReply, role: '平台助理' })
     await loadQuestions()
-  } catch { /* error */ }
+  } catch { /* */ }
+  aiReplying.value = false
 }
 
-onMounted(() => { loadQuestions() })
+onMounted(async () => {
+  await loadQuestions()
+  /* 检查是否有等待中的 AI 回复 */
+  const pendingQid = sessionStorage.getItem('pending_ai_reply')
+  if (pendingQid) {
+    sessionStorage.removeItem('pending_ai_reply')
+    aiReplying.value = true
+    try {
+      const q = records.value.find((r) => r.id === Number(pendingQid))
+      if (q) {
+        const aiReply = await chat({ prompt: q.text, style: '启发式教学', history: [] })
+        await replyToQuestion(Number(pendingQid), { content: aiReply, role: '平台助理' })
+        await loadQuestions()
+      }
+    } catch { /* */ }
+    aiReplying.value = false
+  }
+})
 </script>
 
 <template>

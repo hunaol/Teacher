@@ -20,7 +20,7 @@ export async function chat({ prompt, style, history = [] }) {
 
   const messages = [
     { role: 'system', content: systemPrompt },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
+    ...history.map((m) => ({ role: m.role === 'ai' ? 'assistant' : m.role, content: m.content })),
     { role: 'user', content: prompt },
   ]
 

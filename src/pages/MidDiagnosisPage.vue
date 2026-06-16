@@ -13,9 +13,11 @@
 
 // Vue组合式API
 import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 
 // Lucide图标组件（用于按钮和状态指示）
 import { Camera, CheckCircle2, FileText, ListTodo, RefreshCcw, Save, TrendingUp, AlertTriangle, BookOpen, BarChart3 } from 'lucide-vue-next'
+import { getTrend } from '../api/diagnosis'
 
 // 布局与UI基础组件
 import SoloAppShell from '../components/SoloAppShell.vue'
@@ -27,13 +29,15 @@ import UiChart from '../components/charts/UiChart.vue'
 
 // 诊断相关API接口
 import {
-  listDiagnosisStudents,   // 获取诊断学生列表
-  getStudentProfile,       // 获取单个学生诊断画像
-  uploadDiagnosisImage,    // 上传错题图片并获取AI分析结果
-  archiveDiagnosis,        // 将诊断结果归档到学情档案
-  createDiagnosis,         // 手动创建诊断记录
-  listDiagnoses,           // 获取全部诊断记录（扁平列表）
-  getHeatmap,              // 获取班级热力图数据
+  listDiagnosisStudents,
+  getStudentProfile,
+  uploadDiagnosisImage,
+  archiveDiagnosis,
+  createDiagnosis,
+  listDiagnoses,
+  getHeatmap,
+  updateDiagnosis,
+  deleteDiagnosis,
 } from '../api/diagnosis'
 
 // ==================== 页面静态配置 ====================
@@ -142,8 +146,9 @@ function mapStudent(s) {
     color: riskColor(level),                            // 对应颜色
     reason: s.latestRootCause || '',                    // 最新错因分析
     strategy: s.latestInterventions || '',              // 最新改进措施
-    archive: [],                                        // 本地归档记录（初始为空）
-    knowledge: [],                                      // 知识点分布（初始为空，加载画像后填充）
+    archive: [],
+    knowledge: [],
+    imageUrl: s.latestImageUrl || '',
   }
 }
 
@@ -169,6 +174,8 @@ const currentStage = ref(1)
 
 /** 上传的错题图片预览URL（Blob URL） */
 const imagePreview = ref('')
+/** 后端返回的图片永久URL */
+const diagnosisImageUrl = ref('')
 
 /** 控制报告预览弹窗的开关 */
 const reportOpen = ref(false)
@@ -183,6 +190,8 @@ const manualOpen = ref(false)
 const manualForm = ref({ studentName: '', className: '', subject: '数学', topic: '', questionText: '' })
 const manualSubmitting = ref(false)
 const manualResult = ref(null)
+const manualImage = ref(null)
+const manualImagePreview = ref('')
 
 const manualCompleteness = computed(() => {
   const f = manualForm.value
@@ -314,14 +323,22 @@ const knowledgeChartOption = computed(() => {
   }
 })
 
-/** 错题趋势折线图（模拟数据） */
+/** 错题趋势数据（从后端获取） */
+const trendData = ref({ days: [], counts: [] })
+async function loadTrend() {
+  try {
+    const data = await getTrend()
+    if (data) trendData.value = data
+  } catch { /* 留空 */ }
+}
+loadTrend()
 const trendChartOption = computed(() => ({
   tooltip: { trigger: 'axis' },
   grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-  xAxis: { type: 'category', data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] },
+  xAxis: { type: 'category', data: trendData.value.days },
   yAxis: { type: 'value', name: '错题数' },
   series: [{
-    type: 'line', data: [12, 8, 15, 10, 6, 9, 4],
+    type: 'line', data: trendData.value.counts,
     smooth: true, symbol: 'circle', symbolSize: 8,
     lineStyle: { color: '#D98C52', width: 3 },
     itemStyle: { color: '#D98C52' },
@@ -388,8 +405,10 @@ async function selectStudent(item) {
           reason: summary.latestRootCause || students.value[idx].reason,
           strategy: summary.latestInterventions || students.value[idx].strategy,
           knowledge: mapKnowledge(profile.topicDistribution),
+          imageUrl: summary.latestImageUrl || students.value[idx].imageUrl,
         }
-        students.value = [...students.value] // 触发响应式更新
+        if (summary.latestImageUrl) diagnosisImageUrl.value = summary.latestImageUrl
+        students.value = [...students.value]
       }
     }
   } catch {
@@ -413,31 +432,53 @@ function goStage(id) {
  * 4. 重新排序并切换到分析阶段
  * @param {Event} event - 文件选择事件
  */
+const uploadingImage = ref(false)
+const uploadImageError = ref('')
+
 async function uploadSample(event) {
   const file = event.target.files?.[0]
   if (!file) return
   imagePreview.value = URL.createObjectURL(file)
-  const base = current.value
-  if (!base) return
+  uploadingImage.value = true
+  uploadImageError.value = ''
   try {
-    const result = await uploadDiagnosisImage(file, {
-      studentName: base.name,
-      className: base.className,
-      topic: base.topic,
-    })
-    const idx = students.value.findIndex((s) => s.name === base.name)
+    const base = current.value
+    const params = base
+      ? { studentName: base.name, className: base.className, topic: base.topic }
+      : { studentName: '未知学生', className: '', topic: '' }
+    const result = await uploadDiagnosisImage(file, params)
+    /* 保存图片URL */
+    if (result.imageUrl) diagnosisImageUrl.value = result.imageUrl
+    /* 更新或新增学生 */
+    const idx = students.value.findIndex((s) => s.name === (result.studentName || params.studentName))
     if (idx >= 0) {
       students.value[idx] = {
         ...students.value[idx],
         wrongCount: (students.value[idx].wrongCount || 0) + 1,
-        reason: result.rootCause || students.value[idx].reason,
-        strategy: result.interventions || students.value[idx].strategy,
+        reason: result.rootCause || '',
+        strategy: result.interventions || '',
+        imageUrl: result.imageUrl || students.value[idx].imageUrl,
       }
+      currentName.value = students.value[idx].name
+    } else {
+      students.value.push({
+        name: result.studentName || params.studentName,
+        className: result.className || '',
+        topic: result.topic || params.topic,
+        wrongCount: 1, level: '需关注', color: '#f59e0b',
+        reason: result.rootCause || '', strategy: result.interventions || '',
+        knowledge: [], latestDate: formatDate(new Date().toISOString()),
+      })
+      currentName.value = result.studentName || params.studentName
     }
     students.value = [...students.value].sort((a, b) => b.wrongCount - a.wrongCount)
     currentStage.value = 2
-  } catch {
-    // 上传失败时静默处理
+    ElMessage.success('图片识别完成')
+  } catch (e) {
+    uploadImageError.value = e?.message || '识别失败，请重试'
+    ElMessage.error(uploadImageError.value)
+  } finally {
+    uploadingImage.value = false
   }
 }
 
@@ -496,6 +537,35 @@ async function saveStudent() {
   }
 }
 
+/* 编辑/删除诊断 */
+const editOpen = ref(false)
+const editForm = ref({ id: null, studentName: '', className: '', subject: '数学', topic: '', questionText: '' })
+function openEdit(item) {
+  editForm.value = { id: item.id, studentName: item.name, className: item.className, subject: item.topic || '数学', topic: item.topic || '', questionText: item.reason || '' }
+  editOpen.value = true
+}
+async function submitEditDiagnosis() {
+  if (!editForm.value.id) return
+  try {
+    await updateDiagnosis(editForm.value.id, {
+      studentName: editForm.value.studentName.trim(),
+      className: editForm.value.className.trim(),
+      topic: editForm.value.topic.trim(),
+      questionText: editForm.value.questionText.trim(),
+    })
+    editOpen.value = false
+    await loadStudents()
+    ElMessage.success('诊断已更新')
+  } catch { ElMessage.error('更新失败') }
+}
+async function handleDeleteDiagnosis(id) {
+  if (!confirm('确定删除该诊断记录？')) return
+  try {
+    await deleteDiagnosis(id)
+    await loadStudents()
+  } catch { ElMessage.error('删除失败') }
+}
+
 /**
  * 提交手动录入的诊断表单
  * 调用后端创建诊断记录后，关闭弹窗并重新加载学生列表
@@ -504,19 +574,37 @@ async function submitManualDiagnosis() {
   if (!manualForm.value.studentName.trim()) return
   manualSubmitting.value = true; manualResult.value = null
   try {
-    await createDiagnosis({
-      studentName: manualForm.value.studentName.trim(),
-      className: manualForm.value.className.trim() || undefined,
-      subject: manualForm.value.subject,
-      topic: manualForm.value.topic.trim() || undefined,
-      questionText: manualForm.value.questionText.trim() || undefined,
-    })
+    if (manualImage.value) {
+      /* 有图片：走图片上传 + OCR 分析 */
+      await uploadDiagnosisImage(manualImage.value, {
+        studentName: manualForm.value.studentName.trim(),
+        className: manualForm.value.className.trim() || undefined,
+        subject: manualForm.value.subject,
+        topic: manualForm.value.topic.trim() || undefined,
+        questionText: manualForm.value.questionText.trim() || undefined,
+      })
+    } else {
+      /* 无图片：纯文本分析 */
+      await createDiagnosis({
+        studentName: manualForm.value.studentName.trim(),
+        className: manualForm.value.className.trim() || undefined,
+        subject: manualForm.value.subject,
+        topic: manualForm.value.topic.trim() || undefined,
+        questionText: manualForm.value.questionText.trim() || undefined,
+      })
+    }
     manualResult.value = { success: true, msg: `${manualForm.value.studentName} 的诊断已提交`, completeness: manualCompleteness.value.pct }
     manualForm.value = { studentName: '', className: '', subject: '数学', topic: '', questionText: '' }
+    manualImage.value = null; manualImagePreview.value = ''
     await loadStudents()
-  } catch {
-    manualResult.value = { success: false, msg: '提交失败，请重试', completeness: 0 }
+  } catch (e) {
+    manualResult.value = { success: false, msg: e?.message || '提交失败，请重试', completeness: 0 }
   } finally { manualSubmitting.value = false }
+}
+
+function onManualImageChange(e) {
+  const file = e.target.files?.[0]
+  if (file) { manualImage.value = file; manualImagePreview.value = URL.createObjectURL(file) }
 }
 
 /**
@@ -686,6 +774,9 @@ loadStudents()
         展示知识点分布、错因文本、改进措施，支持上传错题和重新分析
       -->
       <section v-if="currentStage === 2" class="editor-card student-profile-card mid-analysis-card">
+        <div style="margin-bottom:12px">
+          <UiButton variant="ghost" size="sm" @click="currentStage = 1">← 返回诊断列表</UiButton>
+        </div>
         <div class="panel-headline">
           <div>
             <p class="hero-kicker">STEP 2</p>
@@ -693,8 +784,10 @@ loadStudents()
           </div>
         </div>
 
-        <!-- 错题图片预览（上传后显示） -->
-        <img v-if="imagePreview" :src="imagePreview" alt="错题样本" class="analysis-preview-image" />
+        <!-- 错题图片 -->
+        <img v-if="diagnosisImageUrl || imagePreview" :src="diagnosisImageUrl || imagePreview" alt="错题样本" class="analysis-preview-image" />
+        <p v-if="uploadingImage" style="font-size:.82rem;color:var(--primary)">⏳ 正在识别分析…</p>
+        <p v-if="uploadImageError" style="color:var(--danger);font-size:.82rem">{{ uploadImageError }}</p>
 
         <!-- 知识点分析图表 -->
         <div v-if="current?.knowledge?.length" class="mid-charts-grid">
@@ -716,12 +809,6 @@ loadStudents()
 
         <!-- 底部操作栏 -->
         <div class="bottom-action-bar">
-          <!-- 上传错题图片（隐藏原生file input，用label美化） -->
-          <label class="ui-btn ui-btn-secondary mid-upload-btn">
-            <input type="file" accept="image/*" class="hidden-file" @change="uploadSample" />
-            <Camera :size="16" />
-            上传新错题
-          </label>
           <UiButton variant="secondary" @click="rerunRecognition">
             <RefreshCcw :size="16" />
             重新分析
@@ -738,6 +825,9 @@ loadStudents()
         展示已归档的诊断记录，支持预览和导出报告
       -->
       <section v-if="currentStage === 3" class="editor-card">
+        <div style="margin-bottom:12px">
+          <UiButton variant="ghost" size="sm" @click="currentStage = 1">← 返回诊断列表</UiButton>
+        </div>
         <div class="panel-headline">
           <div>
             <p class="hero-kicker">STEP 3</p>
@@ -778,23 +868,39 @@ loadStudents()
       </UiDialog>
 
       <!-- 手动录入诊断弹窗 -->
-      <UiDialog v-model:open="manualOpen" title="手动录入诊断">
-        <!-- 完成度指示 -->
-        <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+      <UiDialog v-model:open="manualOpen" title="录入学生诊断" size="lg">
+        <div style="display:flex;gap:16px;margin-bottom:12px;align-items:center">
           <div style="flex:1;height:6px;border-radius:3px;background:var(--border-light);overflow:hidden">
             <div :style="{ width: manualCompleteness.pct + '%', height:'100%', borderRadius:'3px', background: manualCompleteness.pct >= 75 ? '#10B981' : manualCompleteness.pct >= 50 ? '#F59E0B' : '#EF4444', transition:'width .3s' }"></div>
           </div>
           <span style="font-size:.75rem;color:var(--text-faint);white-space:nowrap">{{ manualCompleteness.filled }}/{{ manualCompleteness.total }} 项</span>
         </div>
         <div class="login-form-clean">
-          <div><label class="field-label">学生姓名 <span style="color:var(--danger)">*</span></label><input v-model="manualForm.studentName" placeholder="输入学生姓名" /></div>
-          <div><label class="field-label">班级</label><input v-model="manualForm.className" placeholder="如：六（1）班" /></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div><label class="field-label">学生姓名 <span style="color:var(--danger)">*</span></label><input v-model="manualForm.studentName" placeholder="输入学生姓名" /></div>
+            <div><label class="field-label">班级</label><input v-model="manualForm.className" placeholder="如：六（1）班" /></div>
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div><label class="field-label">学科</label><input v-model="manualForm.subject" placeholder="数学" /></div>
             <div><label class="field-label">知识点</label><input v-model="manualForm.topic" placeholder="如：分数加减法" /></div>
           </div>
           <div><label class="field-label">题目描述</label><textarea v-model="manualForm.questionText" rows="3" placeholder="描述错题内容或学生错误表现…" /></div>
-          <!-- 提交结果 -->
+          <!-- 照片上传（可选） -->
+          <div>
+            <label class="field-label">错题照片 <span style="color:var(--text-faint);font-weight:400">（可选）</span></label>
+            <label class="file-drop-zone" style="padding:20px;cursor:pointer;text-align:center;display:block">
+              <input type="file" accept="image/*" style="display:none" @change="onManualImageChange" />
+              <div v-if="manualImagePreview">
+                <img :src="manualImagePreview" style="max-width:100%;max-height:180px;border-radius:6px" />
+                <p style="font-size:.78rem;color:var(--primary);margin-top:4px">点击更换照片</p>
+              </div>
+              <div v-else>
+                <p style="font-size:1.5rem">📷</p>
+                <p style="font-size:.85rem;color:var(--text-soft)">点击上传错题照片</p>
+                <small>支持 JPG/PNG，可选</small>
+              </div>
+            </label>
+          </div>
           <div v-if="manualResult" :style="{padding:'10px 14px',borderRadius:'8px',fontSize:'.84rem',background:manualResult.success?'var(--success-soft)':'var(--danger-soft)',color:manualResult.success?'var(--success)':'var(--danger)'}">
             {{ manualResult.success ? '✓' : '✕' }} {{ manualResult.msg }}
             <span v-if="manualResult.success"> · 完整度 {{ manualResult.completeness }}%</span>
@@ -805,15 +911,31 @@ loadStudents()
         </div>
       </UiDialog>
 
-      <!-- 全部诊断记录弹窗：展示最近20条记录 -->
+      <!-- 全部诊断记录弹窗 -->
       <UiDialog v-model:open="recordsOpen" title="全部诊断记录" description="">
-        <div class="card-list">
+        <div class="card-list" style="max-height:50vh;overflow-y:auto">
           <article v-for="r in flatRecords.slice(0, 20)" :key="r.id" class="data-card">
-            <strong>{{ r.studentName }} · {{ r.topic }}</strong>
-            <small>{{ formatDate(r.createdAt) }}</small>
-            <p>{{ r.rootCause || '暂无分析' }}</p>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+              <div style="flex:1;min-width:0">
+                <strong>{{ r.studentName }} · {{ r.topic }}</strong>
+                <small>{{ formatDate(r.createdAt) }}</small>
+                <p>{{ r.rootCause || '暂无分析' }}</p>
+              </div>
+              <button class="choice-btn" style="font-size:.7rem;min-height:24px;padding:0 8px;color:var(--danger);flex-shrink:0" @click="handleDeleteDiagnosis(r.id)">删除</button>
+            </div>
           </article>
           <p v-if="!flatRecords.length">暂无记录</p>
+        </div>
+      </UiDialog>
+
+      <!-- 编辑诊断弹窗 -->
+      <UiDialog v-model:open="editOpen" title="编辑诊断">
+        <div class="login-form-clean">
+          <div><label class="field-label">学生姓名</label><input v-model="editForm.studentName" /></div>
+          <div><label class="field-label">班级</label><input v-model="editForm.className" /></div>
+          <div><label class="field-label">知识点</label><input v-model="editForm.topic" /></div>
+          <div><label class="field-label">题目描述</label><textarea v-model="editForm.questionText" rows="3" /></div>
+          <UiButton @click="submitEditDiagnosis">保存修改</UiButton>
         </div>
       </UiDialog>
 
@@ -845,4 +967,6 @@ loadStudents()
   .mid-charts-grid { grid-template-columns: 1fr; }
   .mid-analysis-fields { grid-template-columns: 1fr; }
 }
+.file-drop-zone { border: 2px dashed var(--border); border-radius: var(--radius-lg); background: var(--bg-soft); transition: all .2s; display: block; }
+.file-drop-zone:hover { border-color: var(--primary); background: var(--primary-light); }
 </style>

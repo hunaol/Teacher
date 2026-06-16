@@ -251,14 +251,9 @@ async function submitQuestion() {
     const content = questionDraft.value.trim()
     submitDone.value = true
     questionDraft.value = ''
-    /* 平台助理 AI 自动回复 */
-    if (qid && content) {
-      try {
-        const aiReply = await chat({ prompt: content, style: '启发式教学', history: [] })
-        await replyToQuestion(qid, { content: aiReply, role: '平台助理' })
-      } catch { /* AI回复失败静默处理 */ }
-    }
-    setTimeout(() => { submitDone.value = false; router.push('/novice/qa') }, 600)
+    /* 先跳转，让 QaPage 处理 AI 回复 */
+    if (qid) sessionStorage.setItem('pending_ai_reply', qid)
+    router.push('/novice/qa')
   } catch {
     // error
   } finally {
