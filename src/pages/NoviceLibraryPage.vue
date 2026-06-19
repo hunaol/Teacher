@@ -82,6 +82,8 @@ const uploadForm = ref({ title: '', summary: '', category: '课堂管理' })
 const uploadFileEl = ref(null)
 const uploading = ref(false)
 const uploadError = ref('')
+const uploadProgress = ref(0)
+const uploadStage = ref('')
 
 const categoryOptions = ['课堂管理', '提问设计', '活动组织', '其他']
 
@@ -89,9 +91,22 @@ async function handleUpload() {
   const file = uploadFileEl.value?.files?.[0]
   if (!file) { uploadError.value = '请选择视频文件'; return }
   if (!uploadForm.value.title.trim()) { uploadError.value = '请输入标题'; return }
-  uploading.value = true; uploadError.value = ''
+  uploading.value = true
+  uploadError.value = ''
+  uploadProgress.value = 0
+  uploadStage.value = '正在上传视频文件'
   try {
-    const uploaded = await uploadFile(file, 'teaching_video')
+    const uploaded = await uploadFile(file, 'teaching_video', null, {
+      onUploadProgress: (event) => {
+        if (event.total) {
+          uploadProgress.value = Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100)))
+        } else if (uploadProgress.value === 0) {
+          uploadProgress.value = 1
+        }
+      },
+    })
+    uploadProgress.value = 100
+    uploadStage.value = '正在保存视频信息'
     await uploadVideo({
       title: uploadForm.value.title.trim(),
       summary: uploadForm.value.summary.trim(),
@@ -103,12 +118,17 @@ async function handleUpload() {
     ElMessage.success('视频上传成功')
     uploadOpen.value = false
     uploadForm.value = { title: '', summary: '', category: '课堂管理' }
+    uploadProgress.value = 0
+    uploadStage.value = ''
     await loadVideos()
-  } catch (e) { uploadError.value = e?.message || '上传失败' }
-  finally { uploading.value = false }
+  } catch (e) {
+    uploadError.value = e?.message || '上传失败'
+  } finally {
+    uploading.value = false
+    if (!uploadError.value) uploadStage.value = ''
+  }
 }
 
-/* 编辑/删除视频 */
 const editOpen = ref(false)
 const editingVideo = ref(null)
 const editForm = ref({ title: '', summary: '', category: '' })
@@ -406,6 +426,9 @@ onMounted(() => { loadVideos() })
               <small>支持 MP4、AVI、MOV 等格式</small>
             </div>
           </div>
+          <div v-if="uploading" class="upload-progress">
+            <UiProgress :value="uploadProgress" :label="uploadStage || '正在上传'" show-info />
+          </div>
           <p v-if="uploadError" class="upload-error">{{ uploadError }}</p>
           <UiButton @click="handleUpload" :loading="uploading" block size="lg" variant="primary">
             {{ uploading ? '上传中…' : '确认上传' }}
@@ -433,6 +456,7 @@ onMounted(() => { loadVideos() })
 .file-drop-icon { font-size: 2rem; margin-bottom: 8px; }
 .file-drop-zone p { font-size: .88rem; color: var(--text); margin: 0 0 4px; }
 .file-drop-zone small { font-size: .75rem; color: var(--text-faint); }
+.upload-progress { display: grid; gap: 6px; padding: 4px 0; }
 .upload-error { color: var(--danger); font-size: .82rem; text-align: center; margin: 0; }
 @media (max-width: 640px) { .upload-form-grid { grid-template-columns: 1fr; } }
 

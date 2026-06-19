@@ -1,10 +1,12 @@
 import axios from 'axios'
 
 const TOKEN_KEY = 'auth_token'
+const DEFAULT_TIMEOUT = 30000
+const UPLOAD_TIMEOUT = 10 * 60 * 1000
 
 const client = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: DEFAULT_TIMEOUT,
 })
 
 const TEACHER_TYPES = ['senior', 'mid', 'novice']
@@ -48,4 +50,5 @@ client.interceptors.response.use(
 )
 
 export { TOKEN_KEY }
+export { UPLOAD_TIMEOUT }
 export default client
