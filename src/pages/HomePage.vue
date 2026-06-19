@@ -87,8 +87,8 @@ async function doRegister() {
       <!-- 左侧品牌 -->
       <div class="home-hero">
         <h1>问渠</h1>
-        <!-- <p class="home-subtitle">AI赋能乡村数学教师的公益成长平台</p> -->
-        <p class="home-desc">AI赋能乡村数学教师的公益成长平台 </p>
+        <p class="home-subtitle"> AI赋能乡村数学教师进阶式发展的公益成长平台</p>
+        <!-- <p class="home-desc">AI赋能乡村数学教师进阶式发展的公益成长平台</p> -->
 
         <div class="hero-visual-bg">
           <div class="hero-float-card card-1">
@@ -164,6 +164,7 @@ async function doRegister() {
 
 
 .home-subtitle {
+  text-indent: 4em;
   font-size: 1.1rem;
   color: var(--primary-strong);
   font-weight: 600;
