@@ -1,9 +1,18 @@
+<!--
+  UiEmpty.vue — 空状态占位
+  ====================================================
+  用于列表/搜索等场景无数据时的占位展示，
+  默认使用 SearchX 图标，支持自定义图像与底部操作按钮。
+-->
 <script setup>
 import { cn } from '@/lib/utils'
 import { SearchX } from 'lucide-vue-next'
 
+// 组件属性定义
 const props = defineProps({
+  // 自定义类名
   class: String,
+  // 描述文案
   description: { type: String, default: '暂无数据' },
 })
 </script>

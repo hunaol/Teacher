@@ -1,3 +1,13 @@
+<!--
+  NoviceQaPage.vue — 新任教师"在线答疑"
+  ====================================================
+  功能要点：
+    1. 提问：支持配图、定向 @ 名师
+    2. 自动触发"平台助理"AI 回复（deepseek/qwen chat 接口）
+    3. 历史问答流式浏览、回复
+    4. 与经验库联动：经验库提交问题后可携带 pending_ai_reply 标记跳转过来
+    5. 左侧栏三步式工作流 + 工作清单
+-->
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { CheckCircle2, Image as ImageIcon, ListTodo, Send, UserRoundPlus } from 'lucide-vue-next'
@@ -13,13 +23,14 @@ import { uploadFile } from '../api/file'
 import { chat } from '../api/deepseek'
 
 const { user: currentUser } = useAuthStore()
-const experts = ref([])
-const mentorPickOpen = ref(false)
-const selectedMentor = ref(null)
-const imageUrl = ref('')
-const imagePreview = ref('')
-const uploadingImage = ref(false)
+const experts = ref([])                // 候选名师列表
+const mentorPickOpen = ref(false)     // 名师选择弹窗
+const selectedMentor = ref(null)      // 当前选中的名师
+const imageUrl = ref('')              // 已上传图片的 URL（拼到 question content 中）
+const imagePreview = ref('')          // 本地预览地址
+const uploadingImage = ref(false)     // 图片上传中
 
+/* ==================== 页面静态配置 ==================== */
 const appName = '新任青年教师端'
 const pageTitle = '在线答疑'
 const pageSubtitle = '围绕真实课堂问题，发起提问、编辑记录并追踪处理状态。'
@@ -30,12 +41,16 @@ const navItems = [
   { name: '档案', path: '/novice/portfolio', icon: '档' },
 ]
 
+/* ==================== 工具函数 ==================== */
+
+/** 解析显示用户名称：0=系统；自己=昵称；其他=回退展示 */
 function resolveName(userId, role) {
   if (userId === 0) return role || '系统'
   if (userId === currentUser.value?.id) return currentUser.value?.nickname || '我'
   return role || `用户${userId}`
 }
 
+/** 时间格式化：今天显示 HH:MM，否则显示 MM-DD HH:MM */
 function formatTime(iso) {
   if (!iso) return ''
   const d = new Date(iso)
@@ -47,12 +62,14 @@ function formatTime(iso) {
   return `${d.getMonth() + 1}-${String(d.getDate()).padStart(2, '0')} ${hh}:${mm}`
 }
 
+/** 状态码 → 中文文案 */
 function statusText(status) {
   if (status === 'answered') return '已回复'
   if (status === 'forwarded') return '已转发'
   return '待回复'
 }
 
+/** 解析 markdown 风格的图片语法 ![alt](url) */
 function parseContent(content) {
   const imgMatch = content?.match(/!\[.*?\]\((.*?)\)/)
   const imageUrl = imgMatch ? imgMatch[1] : ''
@@ -60,6 +77,7 @@ function parseContent(content) {
   return { text, imageUrl }
 }
 
+/** 后端问题记录 → 视图模型 */
 function mapQuestion(q) {
   const parsed = parseContent(q.content)
   return {
@@ -85,13 +103,15 @@ function mapQuestion(q) {
   }
 }
 
-const records = ref([])
-const draft = ref('')
-const loading = ref(false)
-const replyDraft = ref('')
-const replyingId = ref(null)
-const currentStage = ref(1)
+/* ==================== 状态变量 ==================== */
+const records = ref([])            // 问题列表（视图模型）
+const draft = ref('')              // 提问草稿
+const loading = ref(false)         // 列表加载态
+const replyDraft = ref('')         // 回复草稿
+const replyingId = ref(null)       // 当前正在回复的问题 ID
+const currentStage = ref(1)        // 工作流步骤
 
+/** 顶部统计卡：待处理 / 已答复 / 本周互动 */
 const derivedStats = computed(() => {
   const total = records.value.length
   const answered = records.value.filter((r) => r.role === '已回复').length
@@ -102,34 +122,45 @@ const derivedStats = computed(() => {
   ]
 })
 
+/** 左侧栏三步式工作流 */
 const workflow = computed(() => [
   { id: 1, title: '写问题', hint: '描述课堂中遇到的具体困难。' },
   { id: 2, title: '看回复', hint: '查看社区老师的答疑。' },
   { id: 3, title: '@名师', hint: '定向请教专家教师。' },
 ])
 
+/** 当前工作流进度 */
 const navProgress = computed(() => Math.round((currentStage.value / 3) * 100))
 
+/** 工作清单 */
 const todoList = computed(() => [
   { id: '1', text: '已发布问题', done: records.value.some((r) => r.userId === currentUser.value?.id) },
   { id: '2', text: '已获得回复', done: records.value.some((r) => r.role === '已回复') },
   { id: '3', text: '已@名师', done: !!selectedMentor.value },
 ])
 
+/** 拉取问题列表 */
 async function loadQuestions() {
   loading.value = true
   try {
     const list = await listQuestions()
     records.value = list.map(mapQuestion)
   } catch {
-    // keep empty
+    // 静默处理
   } finally {
     loading.value = false
   }
 }
 
-const aiReplying = ref(false)
+const aiReplying = ref(false)  // AI 是否正在回复
 
+/**
+ * 提交问题：
+ *   1. 拼接图片 markdown 后调用 createQuestion
+ *   2. 提交成功后清空草稿/图片/名师
+ *   3. 刷新列表
+ *   4. 触发"平台助理"AI 自动回复
+ */
 async function submitQuestion() {
   if (!draft.value.trim()) return
   try {
@@ -155,24 +186,27 @@ async function submitQuestion() {
         })
         await replyToQuestion(questionId, { content: aiReply, role: '平台助理' })
         await loadQuestions()
-      } catch { /* AI reply failed silently */ }
+      } catch { /* AI 回复失败时静默 */ }
       aiReplying.value = false
     }
   } catch {
-    // error
+    // 静默
   }
 }
 
+/** 打开名师选择弹窗：先拉取名师列表 */
 async function openMentorPicker() {
   try { experts.value = await listExperts() } catch { /* */ }
   mentorPickOpen.value = true
 }
 
+/** 选择名师并关闭弹窗 */
 function pickMentor(expert) {
   selectedMentor.value = expert
   mentorPickOpen.value = false
 }
 
+/** 处理提问配图上传：先本地预览，再上传到后端获取 URL */
 async function handleImageUpload(e) {
   const file = e.target.files?.[0]
   if (!file) return
@@ -185,15 +219,24 @@ async function handleImageUpload(e) {
   finally { uploadingImage.value = false }
 }
 
+/** 移除已选图片 */
 function removeImage() {
   imageUrl.value = ''
   imagePreview.value = ''
 }
 
+/** 切换工作流步骤 */
 function goStage(id) { currentStage.value = id }
 
+/** 展开某条问题的回复输入框 */
 function startReply(id) { replyingId.value = id; replyDraft.value = '' }
 
+/**
+ * 提交回复：
+ *   1. 调用 replyToQuestion
+ *   2. 刷新列表
+ *   3. 触发"平台助理"AI 跟进回复
+ */
 async function submitReply(id) {
   if (!replyDraft.value.trim()) return
   const userReply = replyDraft.value.trim()
@@ -215,7 +258,7 @@ async function submitReply(id) {
 
 onMounted(async () => {
   await loadQuestions()
-  /* 检查是否有等待中的 AI 回复 */
+  /* 经验库提交问题后跳转过来时，触发该问题的 AI 回复 */
   const pendingQid = sessionStorage.getItem('pending_ai_reply')
   if (pendingQid) {
     sessionStorage.removeItem('pending_ai_reply')
@@ -234,35 +277,56 @@ onMounted(async () => {
 </script>
 
 <template>
-  <SoloAppShell :app-name="appName" :title="pageTitle" subtitle="" :stats="derivedStats" :nav-items="navItems" :theme="theme">
+  <SoloAppShell :app-name="appName" :title="pageTitle" subtitle="" :stats="derivedStats" :nav-items="navItems"
+    :theme="theme">
     <template #left>
       <aside class="lesson-bookmark-sidebar">
         <div class="bookmark-card">
-          <div class="bookmark-head"><ListTodo :size="16" /><strong>使用顺序</strong></div>
-          <div class="bookmark-progress"><UiProgress :value="navProgress" label="当前步骤" /></div>
-          <button v-for="item in workflow" :key="item.id" type="button" class="bookmark-item" :class="{ active: currentStage === item.id }" @click="goStage(item.id)">
+          <div class="bookmark-head">
+            <ListTodo :size="16" /><strong>使用顺序</strong>
+          </div>
+          <div class="bookmark-progress">
+            <UiProgress :value="navProgress" label="当前步骤" />
+          </div>
+          <button v-for="item in workflow" :key="item.id" type="button" class="bookmark-item"
+            :class="{ active: currentStage === item.id }" @click="goStage(item.id)">
             <span class="bookmark-index">{{ item.id }}</span>
-            <div><strong>{{ item.title }}</strong><p>{{ item.hint }}</p></div>
+            <div><strong>{{ item.title }}</strong>
+              <p>{{ item.hint }}</p>
+            </div>
           </button>
         </div>
         <div class="bookmark-card">
-          <div class="bookmark-head"><CheckCircle2 :size="16" /><strong>工作清单</strong></div>
-          <article v-for="todo in todoList" :key="todo.id" class="todo-row" :class="{ done: todo.done }"><span class="todo-dot"></span><p>{{ todo.text }}</p></article>
+          <div class="bookmark-head">
+            <CheckCircle2 :size="16" /><strong>工作清单</strong>
+          </div>
+          <article v-for="todo in todoList" :key="todo.id" class="todo-row" :class="{ done: todo.done }"><span
+              class="todo-dot"></span>
+            <p>{{ todo.text }}</p>
+          </article>
         </div>
       </aside>
     </template>
 
     <template #right>
       <UiCard class="workspace-panel-card">
-        <div class="workspace-panel-head"><strong>社区记录</strong><span class="header-channel">{{ records.length }} 条</span></div>
-        <ul class="workspace-checklist"><li><span class="workspace-check"></span><span>先发动态，再看回复</span></li></ul>
+        <div class="workspace-panel-head"><strong>社区记录</strong><span class="header-channel">{{ records.length }}
+            条</span></div>
+        <ul class="workspace-checklist">
+          <li><span class="workspace-check"></span><span>先发动态，再看回复</span></li>
+        </ul>
       </UiCard>
     </template>
 
     <section class="feature-screen novice-community-feed">
       <!-- 顶部：提问区 -->
       <section class="editor-card community-compose-card">
-        <div class="panel-headline"><div><p class="hero-kicker">发布问题</p><h3>提出你的课堂疑问</h3></div></div>
+        <div class="panel-headline">
+          <div>
+            <p class="hero-kicker">发布问题</p>
+            <h3>提出你的课堂疑问</h3>
+          </div>
+        </div>
         <div class="community-compose-actions">
           <label class="community-inline-action" style="cursor:pointer;position:relative">
             <ImageIcon :size="16" /> {{ uploadingImage ? '上传中…' : imageUrl ? '已选图' : '配图' }}
@@ -271,13 +335,19 @@ onMounted(async () => {
           <button class="community-inline-action" @click="openMentorPicker">
             <UserRoundPlus :size="16" /> {{ selectedMentor ? '@' + selectedMentor.name : '@名师' }}
           </button>
-          <span v-if="selectedMentor" style="font-size:.82rem;color:var(--primary-strong)">{{ selectedMentor.title }} · {{ selectedMentor.field }}</span>
+          <span v-if="selectedMentor" style="font-size:.82rem;color:var(--primary-strong)">{{ selectedMentor.title }} ·
+            {{
+              selectedMentor.field }}</span>
         </div>
-        <img v-if="imagePreview" :src="imagePreview" style="max-width:200px;max-height:150px;border-radius:8px;margin-bottom:8px" />
+        <img v-if="imagePreview" :src="imagePreview"
+          style="max-width:200px;max-height:150px;border-radius:8px;margin-bottom:8px" />
         <textarea v-model="draft" rows="4" placeholder="描述你在课堂上遇到的具体问题…"></textarea>
         <div class="bottom-action-bar">
-          <UiButton @click="submitQuestion"><Send :size="16" /> 发布</UiButton>
-          <span v-if="aiReplying" style="font-size:.82rem;color:var(--primary-strong);display:flex;align-items:center;gap:6px">
+          <UiButton @click="submitQuestion">
+            <Send :size="16" /> 发布
+          </UiButton>
+          <span v-if="aiReplying"
+            style="font-size:.82rem;color:var(--primary-strong);display:flex;align-items:center;gap:6px">
             <span class="ai-dot"></span> 平台助理回复中…
           </span>
         </div>
@@ -285,25 +355,37 @@ onMounted(async () => {
 
       <!-- 下方：历史问题列表 -->
       <section class="editor-card">
-        <div class="panel-headline"><div><h3>过往问题</h3></div><span class="status-pill">{{ records.length }} 条</span></div>
+        <div class="panel-headline">
+          <div>
+            <h3>过往问题</h3>
+          </div><span class="status-pill">{{ records.length }} 条</span>
+        </div>
         <p v-if="loading" class="helper-copy">加载中…</p>
         <div v-else class="community-post-list">
           <article v-for="item in records" :key="item.id" class="community-post-card">
             <div class="community-post-head">
               <div class="community-avatar alt">{{ item.from.slice(0, 1) }}</div>
-              <div class="community-post-meta"><strong>{{ item.from }}</strong><small>{{ item.time }} · {{ item.role }}</small></div>
+              <div class="community-post-meta"><strong>{{ item.from }}</strong><small>{{ item.time }} · {{ item.role
+              }}</small></div>
             </div>
             <div class="community-post-copy">
               <span class="community-topic-tag"># {{ item.topic }}</span>
               <p>{{ item.text }}</p>
-              <img v-if="item.imageUrl" :src="item.imageUrl" style="max-width:100%;max-height:300px;border-radius:8px;margin-top:6px" />
+              <img v-if="item.imageUrl" :src="item.imageUrl"
+                style="max-width:100%;max-height:300px;border-radius:8px;margin-top:6px" />
             </div>
             <div class="community-comment-box">
-              <article v-for="reply in item.comments" :key="reply.id" class="community-comment-item"><strong>{{ reply.from }}</strong><p>{{ reply.text }}</p></article>
+              <article v-for="reply in item.comments" :key="reply.id" class="community-comment-item"><strong>{{
+                reply.from
+              }}</strong>
+                <p>{{ reply.text }}</p>
+              </article>
               <p v-if="!item.comments.length" class="helper-copy">暂无回复</p>
               <div v-if="replyingId === item.id" style="margin-top:8px">
                 <textarea v-model="replyDraft" rows="2" placeholder="输入回复…"></textarea>
-                <div class="bottom-action-bar"><UiButton @click="submitReply(item.id)">发送回复</UiButton></div>
+                <div class="bottom-action-bar">
+                  <UiButton @click="submitReply(item.id)">发送回复</UiButton>
+                </div>
               </div>
               <button v-else class="choice-btn" @click="startReply(item.id)" style="margin-top:6px">回复</button>
             </div>
@@ -326,6 +408,23 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.ai-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); animation: aiPulse 1s ease-in-out infinite; }
-@keyframes aiPulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+.ai-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: aiPulse 1s ease-in-out infinite;
+}
+
+@keyframes aiPulse {
+
+  0%,
+  100% {
+    opacity: .3;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
 </style>

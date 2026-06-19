@@ -1,9 +1,19 @@
+<!--
+  UiBadge.vue — 徽章组件
+  ====================================================
+  用于展示状态标签或计数徽章，支持多种语义颜色（success/warning/danger/info）
+  以及可选的小圆点指示器。
+-->
 <script setup>
 import { cn } from '@/lib/utils'
 
+// 组件属性定义
 const props = defineProps({
+  // 自定义类名
   class: String,
+  // 颜色变体：default | success | warning | danger | info
   variant: { type: String, default: 'default' },
+  // 是否显示左侧小圆点
   dot: { type: Boolean, default: false },
 })
 </script>

@@ -1,13 +1,27 @@
+<!--
+  UiInput.vue — 通用输入框
+  ====================================================
+  基于 v-model 双向绑定，支持 prefix/suffix 自定义插槽与清除按钮，
+  并可在下方展示错误提示信息。
+-->
 <script setup>
 import { cn } from '@/lib/utils'
 
+// v-model 双向绑定
 const model = defineModel()
+// 组件属性定义
 const props = defineProps({
+  // 自定义类名
   class: String,
+  // 占位提示
   placeholder: String,
+  // 是否只读
   readonly: Boolean,
+  // 输入框类型
   type: { type: String, default: 'text' },
+  // 错误信息文案
   error: { type: String, default: '' },
+  // 是否显示清除按钮（输入框非空时）
   clearable: { type: Boolean, default: false },
 })
 </script>

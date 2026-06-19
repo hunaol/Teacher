@@ -1,14 +1,25 @@
+<!--
+  ProfilePage.vue — 个人中心
+  ====================================================
+  展示教师基本信息（学校、学科、年级、身份等）以及多维统计数据
+  （教案、反思、诊断、课题、成长记录、名师点评），并支持资料编辑保存。
+-->
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { User, School, Notebook, FileText, Search, Trophy, Folder, Clock } from 'lucide-vue-next'
 import { getProfile, updateProfile, getDashboard } from '../api/profile'
 import { getPortfolio } from '../api/growth'
 
+// 基础资料
 const profile = ref(null)
+// 仪表盘统计
 const dashboard = ref(null)
+// 成长档案统计：成长记录数 + 名师点评数
 const portfolioStats = ref({ events: 0, feedbacks: 0 })
+// 保存中状态（用于按钮禁用）
 const saving = ref(false)
 
+// 编辑表单的响应式对象
 const form = reactive({
   nickname: '',
   school: '',
@@ -21,8 +32,9 @@ const form = reactive({
   phone: '',
 })
 
+/** 拉取个人资料、统计、成长档案并初始化表单 */
 async function load() {
-  try { profile.value = await getProfile() } catch { /* */ }
+  try { profile.value = await getProfile() } catch { /* 静默失败 */ }
   try { dashboard.value = await getDashboard() } catch { /* */ }
   try { const p = await getPortfolio(); portfolioStats.value = { events: p.events?.length || 0, feedbacks: p.feedbacks?.length || 0 } } catch { /* */ }
   if (profile.value) {
@@ -38,9 +50,10 @@ async function load() {
   }
 }
 
+/** 提交编辑：保存后重新拉取数据 */
 async function save() {
   saving.value = true
-  try { await updateProfile({ ...form }); await load() } catch { /* */ }
+  try { await updateProfile({ ...form }); await load() } catch { /* 静默失败 */ }
   finally { saving.value = false }
 }
 

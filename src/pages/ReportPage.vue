@@ -1,21 +1,34 @@
+<!--
+  ReportPage.vue — 报告中心
+  ====================================================
+  集中生成三类教学档案：
+    1. 教学经验册（experience）
+    2. 考核材料包（assessment）
+    3. 成长报告（growth）
+  生成成功后展示可下载链接。
+-->
 <script setup>
 import { ref } from 'vue'
 import { FileText, Download, Loader, CheckCircle } from 'lucide-vue-next'
 import { generateExperienceBook, generateAssessmentPackage, generateGrowthReport } from '../api/report'
 
+// 最近一次生成的报告
 const result = ref(null)
+// 正在生成的报告类型
 const generating = ref('')
 
+/** 根据 type 选择对应的 API 并触发生成 */
 async function gen(type) {
   generating.value = type
   result.value = null
   try {
     const fn = type === 'experience' ? generateExperienceBook : type === 'assessment' ? generateAssessmentPackage : generateGrowthReport
     result.value = await fn()
-  } catch { /* */ }
+  } catch { /* 静默失败 */ }
   finally { generating.value = '' }
 }
 
+// 三类报告的元信息（标题 / 描述 / 适用身份 / 颜色）
 const reports = [
   { type: 'experience', title: '教学经验册', desc: '汇总教案、反思和经验记录，生成结构化 PDF', audience: '老年资深教师 / 中年骨干教师', color: '#4f46e5', bg: '#eef2ff' },
   { type: 'assessment', title: '考核材料包', desc: '整理课堂诊断、课题研究和成长记录，生成 Word 文档', audience: '中年骨干教师', color: '#d97706', bg: '#fef3c7' },

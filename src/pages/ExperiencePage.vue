@@ -1,12 +1,20 @@
+<!--
+  ExperiencePage.vue — 我的经验册
+  ====================================================
+  汇总教师本人的教案、反思与分享记录，支持导出为 PDF。
+-->
 <script setup>
 import { ref, onMounted } from 'vue'
 import { BookOpen, FileText, Share2, Download, MessageCircle } from 'lucide-vue-next'
 import { getExperienceBook, shareExperience, exportExperience } from '../api/experience'
 
+// 经验册数据（含 lessonCount / reflectionCount / items）
 const book = ref(null)
 
 async function load() { try { book.value = await getExperienceBook() } catch { /* */ } }
+/** 分享指定教案到教研库 */
 async function share(lessonId) { try { await shareExperience({ lessonId, title: '分享经验' }); await load() } catch { /* */ } }
+/** 导出经验册 PDF：拿到文件 URL 后在新窗口打开 */
 async function exportPdf() { try { const r = await exportExperience(); window.open(r.file?.publicUrl, '_blank') } catch { /* */ } }
 
 onMounted(load)

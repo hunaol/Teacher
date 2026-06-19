@@ -1,14 +1,25 @@
+<!--
+  LocalCasePage.vue — 乡土教学案例库
+  ====================================================
+  支持按关键词 / 学科筛选本地教学案例，并提供新增与初始化示例数据。
+-->
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { BookOpen, MapPin, Plus, Search, Sparkles } from 'lucide-vue-next'
 import { listLocalCases, createLocalCase, seedLocalCases } from '../api/local-case'
 
+// 案例列表
 const cases = ref([])
+// 搜索关键词
 const keyword = ref('')
+// 学科筛选
 const subject = ref('')
+// 新增案例的表单
 const form = ref({ title: '', subject: '数学', grade: '', content: '', localScenario: '' })
+// 是否展开新增表单
 const showForm = ref(false)
 
+// 根据关键词与学科过滤后的列表
 const filtered = computed(() => {
   let list = cases.value
   if (keyword.value) list = list.filter((c) => c.title.includes(keyword.value) || (c.knowledgePoint || '').includes(keyword.value))
@@ -16,10 +27,13 @@ const filtered = computed(() => {
   return list
 })
 
+// 学科下拉选项
 const subjects = ['数学', '语文', '科学', '综合实践', '英语']
 
 async function load() { try { cases.value = await listLocalCases() } catch { /* */ } }
+/** 用 mock 数据初始化示例案例 */
 async function seed() { try { await seedLocalCases(); await load() } catch { /* */ } }
+/** 提交新增案例后清空表单并刷新 */
 async function submit() { try { await createLocalCase(form.value); showForm.value = false; form.value = { title: '', subject: '数学', grade: '', content: '', localScenario: '' }; await load() } catch { /* */ } }
 
 onMounted(load)
