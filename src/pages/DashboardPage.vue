@@ -1,3 +1,12 @@
+<!--
+  DashboardPage.vue — 通用工作台
+  ====================================================
+  为所有已登录教师展示：
+    1. 来自 profile API 的统计数据（counters）
+    2. 入口卡片（个人中心 / 报告 / 案例 / 课程 / 经验 / 文件）
+    3. 最近动态（来自成长档案 events）
+    4. 未读通知数量
+-->
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -6,16 +15,21 @@ import { listNotifications } from '../api/notification'
 import { getPortfolio } from '../api/growth'
 
 const router = useRouter()
+// 仪表盘统计数据
 const dashboard = ref(null)
+// 未读通知数量
 const unreadCount = ref(0)
+// 最近成长动态
 const recentEvents = ref([])
 
+/** 并行拉取三组数据，单一接口失败不影响其他展示 */
 async function load() {
-  try { dashboard.value = await getDashboard() } catch { /* */ }
+  try { dashboard.value = await getDashboard() } catch { /* 接口失败时静默 */ }
   try { const ns = await listNotifications(true); unreadCount.value = ns.length } catch { /* */ }
   try { const p = await getPortfolio(); recentEvents.value = (p.events || []).slice(0, 5) } catch { /* */ }
 }
 
+// 统一路由跳转
 function go(path) { router.push(path) }
 
 onMounted(load)

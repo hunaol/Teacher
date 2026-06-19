@@ -1,16 +1,25 @@
+<!--
+  FilePage.vue — 文件管理
+  ====================================================
+  教师文件上传与下载列表。文件类型会根据 MIME 动态选择图标（图片/视频/文件），
+  并在右侧展示文件大小与下载链接。
+-->
 <script setup>
 import { ref, onMounted } from 'vue'
 import { FileText, Upload, Download, Image, Video } from 'lucide-vue-next'
 import { listFiles, uploadFile } from '../api/file'
 
+// 文件列表
 const files = ref([])
 
 async function load() { try { files.value = await listFiles() } catch { /* */ } }
+/** 触发 input 选择的文件后调用上传接口 */
 async function upload(e) {
   const file = e.target.files?.[0]; if (!file) return
   try { await uploadFile(file); await load() } catch { /* */ }
 }
 
+/** 根据 MIME 返回对应图标组件 */
 function iconFor(mime) {
   if (!mime) return FileText
   if (mime.startsWith('image/')) return Image
@@ -18,6 +27,7 @@ function iconFor(mime) {
   return FileText
 }
 
+/** 字节数转可读尺寸（KB / MB） */
 function sizeLabel(bytes) {
   if (!bytes) return '0 B'
   if (bytes > 1048576) return (bytes / 1048576).toFixed(1) + ' MB'

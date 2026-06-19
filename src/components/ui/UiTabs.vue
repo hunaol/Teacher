@@ -1,13 +1,26 @@
+<!--
+  UiTabs.vue — 选项卡
+  ====================================================
+  通过 v-model 双向绑定当前激活值；items 形如 [{ value, label }]。
+  支持 default（药丸）和 underline（下划线）两种视觉风格。
+-->
 <script setup>
 import { computed } from 'vue'
 
+// 组件属性定义
 const props = defineProps({
+  // v-model 绑定的当前激活值
   modelValue: { type: String, default: '' },
+  // 选项卡数据
   items: { type: Array, default: () => [] },
+  // 视觉变体：default | underline
   variant: { type: String, default: 'default' },
 })
 
+// 双向绑定事件
 const emit = defineEmits(['update:modelValue'])
+
+// 兜底：未传入时取第一项
 const active = computed(() => props.modelValue || props.items[0]?.value || '')
 </script>
 

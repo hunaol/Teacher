@@ -1,3 +1,10 @@
+<!--
+  NoviceLoginPage.vue — 新任教师登录页
+  ====================================================
+  与 LoginPage 类似，但角色固定为 'novice'：
+    - 登录成功直接跳转到 /novice/library
+    - 提供独立的注册入口（注册后切回登录态）
+-->
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -5,16 +12,20 @@ import { noviceApp } from '../mock/platformData'
 import { useAuthStore } from '../stores/authStore'
 
 const router = useRouter()
+// 全局 authStore：login / register / loading 状态
 const { login, register, loading } = useAuthStore()
 
-const username = ref('')
-const password = ref('')
-const loginError = ref('')
-const isRegister = ref(false)
-const regForm = ref({ nickname: '', teacherType: 'novice' })
+/* ==================== 表单状态 ==================== */
+const username = ref('')                       // 账号
+const password = ref('')                       // 密码
+const loginError = ref('')                     // 错误提示
+const isRegister = ref(false)                  // 是否处于注册态
+const regForm = ref({ nickname: '', teacherType: 'novice' }) // 注册表单
 
+// 左侧亮点标签
 const highlights = ['名师经验库', '在线答疑', '成长档案袋']
 
+/** 登录：成功后跳转 /novice/library */
 async function handleLogin() {
   loginError.value = ''
   if (!username.value.trim() || !password.value.trim()) {
@@ -29,6 +40,7 @@ async function handleLogin() {
   }
 }
 
+/** 注册：注册成功后切回登录态 */
 async function handleRegister() {
   loginError.value = ''
   if (!username.value.trim() || !password.value.trim()) {
@@ -65,8 +77,10 @@ async function handleRegister() {
             <input v-model="username" placeholder="请输入账号" autocomplete="username" />
             <input v-model="password" type="password" placeholder="请输入密码" autocomplete="current-password" />
             <p v-if="loginError" class="login-error">{{ loginError }}</p>
-            <button type="submit" class="login-button-clean" :disabled="loading">{{ loading ? '登录中…' : '进入工作区' }}</button>
-            <p class="helper-copy" style="text-align:center"><a href="#" @click.prevent="isRegister=true;loginError='';username='';password=''">没有账号？注册</a></p>
+            <button type="submit" class="login-button-clean" :disabled="loading">{{ loading ? '登录中…' : '进入工作区'
+              }}</button>
+            <p class="helper-copy" style="text-align:center"><a href="#"
+                @click.prevent="isRegister = true; loginError = ''; username = ''; password = ''">没有账号？注册</a></p>
           </form>
           <form v-else class="login-form-clean" @submit.prevent="handleRegister">
             <input v-model="username" placeholder="请输入账号" autocomplete="username" />
@@ -74,7 +88,8 @@ async function handleRegister() {
             <input v-model="regForm.nickname" placeholder="昵称（选填）" />
             <p v-if="loginError" class="login-error">{{ loginError }}</p>
             <button type="submit" class="login-button-clean" :disabled="loading">{{ loading ? '注册中…' : '注册' }}</button>
-            <p class="helper-copy" style="text-align:center"><a href="#" @click.prevent="isRegister=false;loginError=''">已有账号？登录</a></p>
+            <p class="helper-copy" style="text-align:center"><a href="#"
+                @click.prevent="isRegister = false; loginError = ''">已有账号？登录</a></p>
           </form>
         </div>
       </div>

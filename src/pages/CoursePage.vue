@@ -1,13 +1,23 @@
+<!--
+  CoursePage.vue — 培训课程中心
+  ====================================================
+  按目标教师身份筛选课程，支持报名与学习进度（每次 +20%）更新。
+-->
 <script setup>
 import { ref, onMounted } from 'vue'
 import { BookOpen, Clock, CheckCircle, Play } from 'lucide-vue-next'
 import { listCourses, enrollCourse, updateCourseProgress } from '../api/course'
 
+// 课程列表
 const courses = ref([])
+// 当前筛选的身份：'' | 'senior' | 'mid' | 'novice'
 const audience = ref('')
 
-async function load() { try { courses.value = await listCourses(audience.value || undefined) } catch { /* */ } }
+/** 拉取课程列表（按身份筛选） */
+async function load() { try { courses.value = await listCourses(audience.value || undefined) } catch { /* 接口失败静默 */ } }
+/** 报名课程后重新拉取 */
 async function enroll(id) { try { await enrollCourse(id); await load() } catch { /* */ } }
+/** 更新进度（模拟每次推进 20%） */
 async function updateProgress(id, progress) { try { await updateCourseProgress(id, { progress }); await load() } catch { /* */ } }
 
 onMounted(load)

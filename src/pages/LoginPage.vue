@@ -1,3 +1,9 @@
+<!--
+  LoginPage.vue — 教师登录 / 注册页
+  ====================================================
+  根据当前 URL 前缀（/senior、/mid、/novice）预选对应身份，
+  并在登录成功后跳转到对应身份的工作区首页。
+-->
 <script setup>
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -17,6 +23,7 @@ const pathRole = computed(() => {
   return ''
 })
 
+// 三种教师身份选项及对应的视觉配置
 const roleOptions = [
   { key: 'senior', label: '老年资深教师', icon: Mic, desc: '经验沉淀 · 教案迭代 · 反思追踪', color: '#D98C52' },
   { key: 'mid', label: '中年骨干教师', icon: Bot, desc: '课堂诊断 · AI 助教 · 课题研究', color: '#3B82F6' },
@@ -30,8 +37,10 @@ const password = ref('')
 const regNickname = ref('')
 const error = ref('')
 
+// 当前选中的身份对象，便于展示描述
 const currentRole = computed(() => roleOptions.find((r) => r.key === selectedRole.value))
 
+/** 登录：调用 store -> 跳转工作区 */
 async function doLogin() {
   error.value = ''
   if (!username.value.trim()) { error.value = '请输入账号'; return }
@@ -44,6 +53,7 @@ async function doLogin() {
   } catch (e) { error.value = e?.message || '登录失败' }
 }
 
+/** 注册：成功后切回登录表单，提示用户输入密码登录 */
 async function doRegister() {
   error.value = ''
   if (!username.value.trim()) { error.value = '请输入账号'; return }
@@ -56,6 +66,7 @@ async function doRegister() {
   } catch (e) { error.value = e?.message || '注册失败' }
 }
 
+// 左侧品牌区展示的亮点
 const highlights = ['AI 智能备课', '错题诊断分析', '课题研究导航', '名师经验共享']
 </script>
 

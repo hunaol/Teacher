@@ -1,3 +1,11 @@
+<!--
+  MidAvatarPage.vue — 智能数字人 / AI 教学助手（中年骨干教师端）
+  ====================================================
+  提供与 AI 助教的对话式课堂讲解能力：
+    1. 数字人形象随状态（待机 / 思考 / 讲解）切换
+    2. 支持四种教学风格，每种风格拥有独立对话记录
+    3. 通过 deepseek API 与千问大模型对话生成回答
+-->
 <script setup>
 import { computed, ref, nextTick } from 'vue'
 import { Bot, Send, Sparkles, Trash2 } from 'lucide-vue-next'
@@ -17,40 +25,50 @@ const navItems = [
 ]
 
 /* ==================== 数字人状态 ==================== */
+// 数字人当前状态：idle | speaking | thinking
 const avatarStatus = ref('idle')
+// 状态枚举及对应图片
 const statusList = [
   { key: 'idle', label: '待机中', img: waitImg },
   { key: 'speaking', label: '讲解中', img: replyImg },
   { key: 'thinking', label: '思考中', img: thinkImg },
 ]
+// 根据当前状态计算展示的图片
 const avatarImg = computed(() => statusList.find((s) => s.key === avatarStatus.value)?.img ?? waitImg)
 
 /* ==================== 教学风格 ==================== */
+// 当前选中的教学风格
 const activeStyle = ref('启发式教学')
+// 可选教学风格列表
 const styles = ['启发式教学', '故事化教学', '互动教学', '考试冲刺']
 
 /* ==================== 对话区域 ==================== */
+// 输入框文本
 const inputText = ref('')
+// 所有风格的对话记录（按风格 key 存储）
 const allMessages = ref({})
+// 消息列表 DOM 引用，用于自动滚动
 const messagesRef = ref(null)
+// 发送中状态
 const sending = ref(false)
 
-/* 当前风格的对话记录 */
+/* 当前风格对应的消息列表 */
 const messages = computed(() => allMessages.value[activeStyle.value] || [])
 
-/* 切换风格 */
+/* 切换教学风格并滚到对话底部 */
 function switchStyle(s) {
   activeStyle.value = s
   if (!allMessages.value[s]) allMessages.value[s] = []
   nextTick(() => { const el = messagesRef.value; if (el) el.scrollTop = el.scrollHeight })
 }
 
-/* 添加消息到当前风格 */
+/* 向当前风格的消息列表追加一条消息 */
 function addMsg(msg) {
   if (!allMessages.value[activeStyle.value]) allMessages.value[activeStyle.value] = []
   allMessages.value[activeStyle.value].push(msg)
 }
 
+// 顶部统计卡片：当前风格 / 用户提问次数 / 数字人状态
 const derivedStats = computed(() => [
   { label: '教学风格', value: activeStyle.value.slice(0, 4) },
   { label: '互动次数', value: String((allMessages.value[activeStyle.value] || []).filter((m) => m.role === 'user').length) },
@@ -58,6 +76,14 @@ const derivedStats = computed(() => [
 ])
 
 /* ==================== 交互方法 ==================== */
+/**
+ * 发送消息并获取 AI 回复
+ * 1. 校验输入与发送状态
+ * 2. 追加用户消息到当前风格
+ * 3. 切换数字人状态为思考
+ * 4. 调用 chat 接口
+ * 5. 追加 AI 回复并恢复待机
+ */
 async function handleSend() {
   const text = inputText.value.trim()
   if (!text || sending.value) return
@@ -67,6 +93,7 @@ async function handleSend() {
   sending.value = true
   avatarStatus.value = 'thinking'
 
+  // 历史消息（不含刚刚加入的 user 消息）
   const history = (allMessages.value[activeStyle.value] || []).slice(0, -1)
   try {
     const reply = await chat({
@@ -87,11 +114,13 @@ async function handleSend() {
   }
 }
 
+/** 清空当前风格的对话记录 */
 function clearChat() {
   allMessages.value[activeStyle.value] = []
   avatarStatus.value = 'idle'
 }
 
+// 自动滚动到消息列表底部
 function scrollToBottom() {
   const el = messagesRef.value
   if (el) el.scrollTop = el.scrollHeight

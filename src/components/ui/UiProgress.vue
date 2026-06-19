@@ -1,12 +1,25 @@
+<!--
+  UiProgress.vue — 进度条
+  ====================================================
+  接收 value / max 计算百分比，可选展示 label 与百分比文本，
+  支持 success / exception 状态以改变颜色。
+-->
 <script setup>
+// 组件属性定义
 const props = defineProps({
+  // 当前进度值
   value: { type: Number, default: 0 },
+  // 最大值
   max: { type: Number, default: 100 },
+  // 左侧标签文案
   label: { type: String, default: '' },
+  // 状态：success | exception | ''
   status: { type: String, default: '' },
+  // 是否显示右侧百分比
   showInfo: { type: Boolean, default: false },
 })
 
+// 限制百分比在 [0, 100] 之间
 const pct = Math.min(100, Math.max(0, (props.value / props.max) * 100))
 </script>
 

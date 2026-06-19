@@ -1,14 +1,27 @@
+<!--
+  UiStatistic.vue — 统计数字卡片
+  ====================================================
+  用于展示关键指标，含 title/value/prefix/suffix 与趋势（up/down）指示。
+-->
 <script setup>
 import { cn } from '@/lib/utils'
 import { TrendingUp, TrendingDown } from 'lucide-vue-next'
 
+// 组件属性定义
 const props = defineProps({
+  // 自定义类名
   class: String,
+  // 指标标题
   title: { type: String, default: '' },
+  // 指标数值
   value: { type: [String, Number], default: '' },
+  // 数值前缀（如货币符号）
   prefix: { type: String, default: '' },
+  // 数值后缀（如单位）
   suffix: { type: String, default: '' },
+  // 趋势：up | down
   trend: { type: String, default: '' },
+  // 趋势描述文本
   trendLabel: { type: String, default: '' },
 })
 </script>

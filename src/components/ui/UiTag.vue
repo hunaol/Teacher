@@ -1,15 +1,27 @@
+<!--
+  UiTag.vue — 标签
+  ====================================================
+  与 UiBadge 类似的轻量标签组件，但支持 closable 关闭按钮与 active 高亮态。
+-->
 <script setup>
 import { cn } from '@/lib/utils'
 import { X } from 'lucide-vue-next'
 
+// 组件属性定义
 const props = defineProps({
+  // 自定义类名
   class: String,
+  // 颜色变体：default | primary | success | warning | danger
   variant: { type: String, default: 'default' },
+  // 尺寸：sm | md
   size: { type: String, default: 'md' },
+  // 是否显示关闭按钮
   closable: { type: Boolean, default: false },
+  // 是否高亮（主色填充）
   active: { type: Boolean, default: false },
 })
 
+// 关闭事件
 const emit = defineEmits(['close'])
 </script>
 

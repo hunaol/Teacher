@@ -1,3 +1,12 @@
+<!--
+  MidResearchPage.vue — 课题研究导航（中年骨干教师端）
+  ====================================================
+  从教案资源中提炼并管理研究课题：
+    1. 第一步：浏览资源库并勾选 / 上传教案
+    2. 第二步：调用 AI 推荐课题并编辑完善
+    3. 第三步：管理我的课题库（查看 / 编辑 / 删除）
+  采用乐观更新策略：先写本地再异步同步后端。
+-->
 <script setup>
 import { computed, ref, watch, onMounted, onErrorCaptured } from 'vue'
 import { ArrowLeft, ArrowRight, CheckCircle2, FileText, ListTodo, Search, Send, Telescope, Upload, Eye, Trash2 } from 'lucide-vue-next'
@@ -20,37 +29,53 @@ const navItems = [
   { name: '研究', path: '/mid/research', icon: '研' },
 ]
 
+// 资源分类筛选：全部 / 语文 / 数学 / 综合实践 / 科学
 const categoryList = ['全部', '语文', '数学', '综合实践', '科学']
 
+// 教案资源库
 const docLibrary = ref([])
+// 课题库
 const topicLibrary = ref([])
+// 教案加载状态
 const loadingDocs = ref(false)
+// 页面整体加载异常标记
 const loadError = ref(false)
 
+// 捕获下层组件错误
 onErrorCaptured((err) => {
   loadError.value = true
   return false
 })
 
+// 选中的教案 ID 集合
 const selectedDocIds = ref(new Set())
+// 当前编辑中的课题
 const selectedTopic = ref({ title: '', meta: '', extra: '', sources: [], applicationDraft: '', createdAt: '' })
+// 搜索关键词
 const keyword = ref('')
+// 学科分类
 const category = ref('全部')
+// 当前选中的课题 ID
 const activeTopicId = ref(null)
+// 当前工作流步骤：1/2/3
 const currentStage = ref(1)
 
+// 上传教案弹窗
 const uploadOpen = ref(false)
 const uploadForm = ref({ title: '', summary: '', content: '', subject: '数学', grade: '' })
 const uploading = ref(false)
 const uploadError = ref('')
+// AI 生成中状态
 const isGenerating = ref(false)
 
+// 顶部统计：在研课题 / 可用教案 / 已选来源
 const derivedStats = computed(() => [
   { label: '在研课题', value: String(topicLibrary.value.length) },
   { label: '可用教案', value: String(docLibrary.value.length) },
   { label: '已选来源', value: String(selectedDocIds.value.size) },
 ])
 
+// 按搜索词与分类过滤后的教案列表
 const filteredDocs = computed(() => {
   const v = keyword.value.trim()
   const src = Array.isArray(docLibrary.value) ? docLibrary.value : []
@@ -62,26 +87,32 @@ const filteredDocs = computed(() => {
   })
 })
 
+// 当前已选中的教案对象数组
 const selectedDocs = computed(() =>
   (Array.isArray(docLibrary.value) ? docLibrary.value : []).filter((d) => d && selectedDocIds.value.has(d.id))
 )
 
+// 详情（点开的课题）
 const activeTopicDetail = ref(null)
 
+// 工作流进度
 const navProgress = computed(() => Math.round((currentStage.value / 3) * 100))
 
+// 工作流步骤定义
 const workflow = computed(() => [
   { id: 1, title: '选择教案来源', hint: '从资源库挑选或上传新教案' },
   { id: 2, title: '编辑研究课题', hint: 'AI 推荐 + 手动完善' },
   { id: 3, title: '我的课题库', hint: '查看管理所有课题' },
 ])
 
+// ISO 日期格式化为 YYYY-MM-DD
 function formatDate(iso) {
   if (!iso) return ''
   const d = new Date(iso)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+// 加载教案资源列表
 async function loadDocLibrary() {
   loadingDocs.value = true
   try {
@@ -91,6 +122,7 @@ async function loadDocLibrary() {
   } catch { docLibrary.value = [] } finally { loadingDocs.value = false }
 }
 
+// 加载课题列表（把后端的 sources 字符串转为数组）
 async function loadTopics() {
   try {
     const list = await listTopics()
@@ -98,10 +130,13 @@ async function loadTopics() {
   } catch { topicLibrary.value = [] }
 }
 
+// 切换学科时重新加载教案
 watch(category, () => loadDocLibrary())
 
+// 切换工作流步骤
 function goStage(id) { currentStage.value = id }
 
+// 提交上传教案（乐观更新：先入本地，再异步创建）
 async function submitUpload() {
   if (!uploadForm.value.title.trim()) return
   uploading.value = true; uploadError.value = ''
@@ -126,12 +161,14 @@ async function submitUpload() {
   uploading.value = false
 }
 
+// 切换教案的选中状态（附带 watchResource 上报）
 function toggleDoc(item) {
   if (selectedDocIds.value.has(item.id)) selectedDocIds.value.delete(item.id)
   else { selectedDocIds.value.add(item.id); try { watchResource(item.id) } catch { /* */ } }
   selectedDocIds.value = new Set(selectedDocIds.value)
 }
 
+/** 调用 AI 课题推荐，并切换到第 2 步 */
 async function buildRecommendation() {
   const sources = selectedDocs.value
   if (!sources.length) return ElMessage.warning('请先选择教案')
@@ -148,6 +185,7 @@ async function buildRecommendation() {
   } finally { isGenerating.value = false }
 }
 
+/** 保存课题到服务器（乐观更新） */
 async function saveTopicToServer() {
   if (!selectedTopic.value.title.trim()) return ElMessage.warning('请输入课题名称')
   /* 先生成本地 ID */
@@ -172,6 +210,7 @@ async function saveTopicToServer() {
   } catch { /* 本地已保存 */ }
 }
 
+// 在第三步中打开指定课题详情
 function openTopic(item) {
   activeTopicId.value = item.id
   const sources = Array.isArray(item.sources) ? item.sources : (typeof item.sources === 'string' ? item.sources.split(',') : [])
@@ -179,30 +218,36 @@ function openTopic(item) {
   currentStage.value = 3
 }
 
+// 移除当前编辑课题的某个来源
 function removeSource(idx) {
   const s = [...(selectedTopic.value.sources || [])]; s.splice(idx, 1)
   selectedTopic.value = { ...selectedTopic.value, sources: s }
 }
 
-/* 课题管理弹窗 */
+/* === 课题管理弹窗：编辑 / 删除 / 查看 === */
 const topicManageOpen = ref(false)
 const editingTopicId = ref(null)
 const editTopicForm = ref({ title: '', meta: '', extra: '' })
+
+// 打开管理弹窗
 function openTopicManage() {
   loadTopics()
   topicManageOpen.value = true
 }
 
+// 开始编辑某课题
 function startEditTopic(item) {
   editingTopicId.value = item.id
   editTopicForm.value = { title: item.title || '', meta: item.meta || '', extra: item.extra || '' }
 }
 
+// 取消编辑
 function cancelEdit() {
   editingTopicId.value = null
   editTopicForm.value = { title: '', meta: '', extra: '' }
 }
 
+// 保存编辑（乐观更新）
 async function saveEditTopic() {
   if (!editingTopicId.value) return
   /* 先更新本地 */
@@ -220,6 +265,7 @@ async function saveEditTopic() {
   try { await updateTopic(editingTopicId.value, editTopicForm.value) } catch { /* 本地已生效 */ }
 }
 
+// 删除课题（乐观更新）
 async function handleDeleteTopic(id) {
   /* 先从本地移除 */
   topicLibrary.value = topicLibrary.value.filter((t) => t.id !== id)
@@ -229,6 +275,7 @@ async function handleDeleteTopic(id) {
   try { await deleteTopic(id) } catch { /* 本地已生效 */ }
 }
 
+// 从管理弹窗跳到详情
 function viewTopic(item) {
   topicManageOpen.value = false
   openTopic(item)
@@ -238,21 +285,32 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
 </script>
 
 <template>
-  <SoloAppShell :app-name="appName" :title="pageTitle" :subtitle="pageSubtitle" :stats="derivedStats" :nav-items="navItems" :theme="theme">
+  <SoloAppShell :app-name="appName" :title="pageTitle" :subtitle="pageSubtitle" :stats="derivedStats"
+    :nav-items="navItems" :theme="theme">
     <template #left>
       <aside class="lesson-bookmark-sidebar">
         <div class="bookmark-card">
-          <div class="bookmark-head"><ListTodo :size="16" /><strong>研究流程</strong></div>
-          <div class="bookmark-progress"><UiProgress :value="navProgress" /></div>
-          <button v-for="item in workflow" :key="item.id" type="button" class="bookmark-item" :class="{ active: currentStage === item.id }" @click="goStage(item.id)">
+          <div class="bookmark-head">
+            <ListTodo :size="16" /><strong>研究流程</strong>
+          </div>
+          <div class="bookmark-progress">
+            <UiProgress :value="navProgress" />
+          </div>
+          <button v-for="item in workflow" :key="item.id" type="button" class="bookmark-item"
+            :class="{ active: currentStage === item.id }" @click="goStage(item.id)">
             <span class="bookmark-index">{{ item.id }}</span>
-            <div><strong>{{ item.title }}</strong><p>{{ item.hint }}</p></div>
+            <div><strong>{{ item.title }}</strong>
+              <p>{{ item.hint }}</p>
+            </div>
           </button>
         </div>
 
         <div class="bookmark-card">
-          <div class="bookmark-head"><FileText :size="16" /><strong>课题快捷入口</strong></div>
-          <article v-for="item in topicLibrary.slice(0, 6)" :key="item.id" class="history-row" :class="{ active: activeTopicId === item.id }" @click="openTopic(item)">
+          <div class="bookmark-head">
+            <FileText :size="16" /><strong>课题快捷入口</strong>
+          </div>
+          <article v-for="item in topicLibrary.slice(0, 6)" :key="item.id" class="history-row"
+            :class="{ active: activeTopicId === item.id }" @click="openTopic(item)">
             <strong>{{ item.title }}</strong><small>{{ formatDate(item.createdAt) }}</small>
           </article>
           <p v-if="!topicLibrary.length" class="helper-copy" style="font-size:.78rem">暂无课题</p>
@@ -261,7 +319,9 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
     </template>
 
     <section class="feature-screen mid-research-archive-board" style="width:100%">
-      <div v-if="loadError" class="editor-card"><p>页面加载出错</p></div>
+      <div v-if="loadError" class="editor-card">
+        <p>页面加载出错</p>
+      </div>
 
       <!-- ====== STEP 1 ====== -->
       <section v-if="currentStage === 1">
@@ -272,10 +332,15 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
               <h3>选择教案作为课题来源</h3>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <UiButton @click="openTopicManage"><Eye :size="14" /> 查看所有课题</UiButton>
-              <UiButton variant="primary" @click="uploadOpen = true"><Upload :size="14" /> 上传教案</UiButton>
+              <UiButton @click="openTopicManage">
+                <Eye :size="14" /> 查看所有课题
+              </UiButton>
+              <UiButton variant="primary" @click="uploadOpen = true">
+                <Upload :size="14" /> 上传教案
+              </UiButton>
               <UiButton @click="buildRecommendation" :disabled="!selectedDocIds.size" :loading="isGenerating">
-                {{ isGenerating ? 'AI 分析中…' : '生成课题' }} <ArrowRight :size="14" />
+                {{ isGenerating ? 'AI 分析中…' : '生成课题' }}
+                <ArrowRight :size="14" />
               </UiButton>
             </div>
           </div>
@@ -286,18 +351,21 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
           <label class="old-library-search" style="flex:1;min-width:180px">
             <Search :size="15" /><input v-model="keyword" placeholder="搜索教案…" />
           </label>
-          <span v-if="selectedDocIds.size" class="status-pill" style="background:var(--primary-light);color:var(--primary-strong);border-color:var(--primary)">
+          <span v-if="selectedDocIds.size" class="status-pill"
+            style="background:var(--primary-light);color:var(--primary-strong);border-color:var(--primary)">
             已选 {{ selectedDocIds.size }} 篇
           </span>
         </div>
         <div class="old-library-tags">
-          <button v-for="item in categoryList" :key="item" class="old-library-tag" :class="{ active: category === item }" @click="category = item">{{ item }}</button>
+          <button v-for="item in categoryList" :key="item" class="old-library-tag"
+            :class="{ active: category === item }" @click="category = item">{{ item }}</button>
         </div>
 
         <!-- 教案卡片 -->
         <p v-if="loadingDocs" class="helper-copy">加载中…</p>
         <div v-else class="old-library-grid">
-          <article v-for="item in filteredDocs" :key="item.id" class="old-doc-card research-doc-card" :class="{ active: selectedDocIds.has(item.id) }" @click="toggleDoc(item)">
+          <article v-for="item in filteredDocs" :key="item.id" class="old-doc-card research-doc-card"
+            :class="{ active: selectedDocIds.has(item.id) }" @click="toggleDoc(item)">
             <div class="old-doc-cover research-doc-cover">
               <FileText :size="28" />
               <span v-if="selectedDocIds.has(item.id)" class="research-check-badge">✓</span>
@@ -311,7 +379,8 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
               </div>
             </div>
           </article>
-          <p v-if="!loadingDocs && !filteredDocs.length" class="helper-copy" style="grid-column:1/-1;padding:32px">暂无教案，点击"上传教案"添加</p>
+          <p v-if="!loadingDocs && !filteredDocs.length" class="helper-copy" style="grid-column:1/-1;padding:32px">
+            暂无教案，点击"上传教案"添加</p>
         </div>
       </section>
 
@@ -319,19 +388,25 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
       <section v-if="currentStage === 2">
         <!-- 返回按钮 -->
         <div style="margin-bottom:14px">
-          <UiButton variant="ghost" @click="currentStage = 1"><ArrowLeft :size="14" /> 返回重新选择教案</UiButton>
+          <UiButton variant="ghost" @click="currentStage = 1">
+            <ArrowLeft :size="14" /> 返回重新选择教案
+          </UiButton>
         </div>
 
         <div class="editor-card">
           <div class="panel-headline" style="margin-bottom:16px">
-            <div><p class="hero-kicker">编辑课题</p><h3>完善研究课题信息</h3></div>
+            <div>
+              <p class="hero-kicker">编辑课题</p>
+              <h3>完善研究课题信息</h3>
+            </div>
           </div>
 
           <!-- 已选来源 -->
           <div v-if="selectedDocs.length" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
             <span v-for="item in selectedDocs" :key="item.id" class="ui-tag ui-tag-primary" style="font-size:.78rem">
               {{ item.title }}
-              <button @click="toggleDoc(item)" style="background:none;border:none;cursor:pointer;padding:0 2px;opacity:.6">&times;</button>
+              <button @click="toggleDoc(item)"
+                style="background:none;border:none;cursor:pointer;padding:0 2px;opacity:.6">&times;</button>
             </span>
           </div>
 
@@ -352,7 +427,9 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
 
           <div class="bottom-action-bar" style="padding-top:14px;border-top:1px solid var(--border-light)">
             <UiButton variant="secondary" @click="buildRecommendation" :loading="isGenerating">🔄 AI 重新推荐</UiButton>
-            <UiButton @click="saveTopicToServer"><FileText :size="14" /> 保存课题</UiButton>
+            <UiButton @click="saveTopicToServer">
+              <FileText :size="14" /> 保存课题
+            </UiButton>
           </div>
         </div>
       </section>
@@ -360,22 +437,29 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
       <!-- ====== STEP 3 ====== -->
       <section v-if="currentStage === 3">
         <div style="margin-bottom:14px">
-          <UiButton variant="ghost" @click="currentStage = 1"><ArrowLeft :size="14" /> 返回资源库</UiButton>
+          <UiButton variant="ghost" @click="currentStage = 1">
+            <ArrowLeft :size="14" /> 返回资源库
+          </UiButton>
         </div>
 
         <div class="editor-card" style="margin-bottom:16px">
-          <div class="panel-headline"><h3>我的课题库（{{ topicLibrary.length }}）</h3></div>
+          <div class="panel-headline">
+            <h3>我的课题库（{{ topicLibrary.length }}）</h3>
+          </div>
           <div v-if="!topicLibrary.length" class="helper-copy" style="padding:40px">
             <FileText :size="32" style="color:var(--text-faint);margin-bottom:12px" />
             <p>还没有课题</p>
             <UiButton variant="secondary" @click="currentStage = 1" style="margin-top:8px">去选择教案</UiButton>
           </div>
           <div v-else class="my-topic-list">
-            <article v-for="item in topicLibrary" :key="item.id" class="my-topic-row" :class="{ active: activeTopicId === item.id }" @click="openTopic(item)">
+            <article v-for="item in topicLibrary" :key="item.id" class="my-topic-row"
+              :class="{ active: activeTopicId === item.id }" @click="openTopic(item)">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%">
                 <div style="flex:1;min-width:0">
                   <strong>{{ item.title }}</strong>
-                  <p style="margin:4px 0 0;font-size:.8rem;color:var(--text-soft)">{{ item.meta ? item.meta.slice(0, 80) + (item.meta.length > 80 ? '…' : '') : '暂无依据' }}</p>
+                  <p style="margin:4px 0 0;font-size:.8rem;color:var(--text-soft)">{{ item.meta ? item.meta.slice(0, 80)
+                    +
+                    (item.meta.length > 80 ? '…' : '') : '暂无依据' }}</p>
                 </div>
                 <small style="flex-shrink:0;margin-left:12px;margin-top:2px">{{ formatDate(item.createdAt) }}</small>
               </div>
@@ -387,12 +471,19 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
         <div v-if="activeTopicDetail" class="editor-card" style="background:var(--bg-soft)">
           <div class="panel-headline" style="margin-bottom:12px">
             <h3>{{ activeTopicDetail.title }}</h3>
-            <span class="status-pill" v-if="activeTopicDetail.createdAt">{{ formatDate(activeTopicDetail.createdAt) }}</span>
+            <span class="status-pill" v-if="activeTopicDetail.createdAt">{{ formatDate(activeTopicDetail.createdAt)
+              }}</span>
           </div>
           <div style="display:grid;gap:14px;font-size:.9rem;line-height:1.7">
-            <div v-if="activeTopicDetail.meta"><strong>选题依据</strong><p style="white-space:pre-wrap;margin-top:4px">{{ activeTopicDetail.meta }}</p></div>
-            <div v-if="activeTopicDetail.extra"><strong>研究计划</strong><p style="white-space:pre-wrap;margin-top:4px">{{ activeTopicDetail.extra }}</p></div>
-            <div v-if="activeTopicDetail.sources?.length"><strong>参考教案</strong><p style="margin-top:4px">{{ activeTopicDetail.sources.join('、') }}</p></div>
+            <div v-if="activeTopicDetail.meta"><strong>选题依据</strong>
+              <p style="white-space:pre-wrap;margin-top:4px">{{ activeTopicDetail.meta }}</p>
+            </div>
+            <div v-if="activeTopicDetail.extra"><strong>研究计划</strong>
+              <p style="white-space:pre-wrap;margin-top:4px">{{ activeTopicDetail.extra }}</p>
+            </div>
+            <div v-if="activeTopicDetail.sources?.length"><strong>参考教案</strong>
+              <p style="margin-top:4px">{{ activeTopicDetail.sources.join('、') }}</p>
+            </div>
           </div>
         </div>
       </section>
@@ -400,12 +491,17 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
       <!-- 上传弹窗 -->
       <UiDialog v-model:open="uploadOpen" title="上传教案">
         <div class="login-form-clean">
-          <div class="profile-form-field"><label>教案标题 <span style="color:var(--danger)">*</span></label><input v-model="uploadForm.title" placeholder="如：五年级《分数加减法》教案" /></div>
-          <div class="profile-form-field"><label>简介</label><textarea v-model="uploadForm.summary" rows="2" placeholder="简要描述…" /></div>
-          <div class="profile-form-field"><label>内容（可选）</label><textarea v-model="uploadForm.content" rows="3" placeholder="教案 Markdown 正文…" /></div>
+          <div class="profile-form-field"><label>教案标题 <span style="color:var(--danger)">*</span></label><input
+              v-model="uploadForm.title" placeholder="如：五年级《分数加减法》教案" /></div>
+          <div class="profile-form-field"><label>简介</label><textarea v-model="uploadForm.summary" rows="2"
+              placeholder="简要描述…" /></div>
+          <div class="profile-form-field"><label>内容（可选）</label><textarea v-model="uploadForm.content" rows="3"
+              placeholder="教案 Markdown 正文…" /></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="profile-form-field"><label>学科</label><input v-model="uploadForm.subject" placeholder="数学" /></div>
-            <div class="profile-form-field"><label>年级</label><input v-model="uploadForm.grade" placeholder="五年级" /></div>
+            <div class="profile-form-field"><label>学科</label><input v-model="uploadForm.subject" placeholder="数学" />
+            </div>
+            <div class="profile-form-field"><label>年级</label><input v-model="uploadForm.grade" placeholder="五年级" />
+            </div>
           </div>
           <p v-if="uploadError" style="color:var(--danger);font-size:.82rem">{{ uploadError }}</p>
           <UiButton @click="submitUpload" :loading="uploading" block>{{ uploading ? '上传中…' : '确认上传' }}</UiButton>
@@ -438,9 +534,12 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
                   <small>{{ formatDate(item.createdAt) }}</small>
                 </div>
                 <div style="display:flex;gap:4px;flex-shrink:0">
-                  <button class="choice-btn" style="font-size:.75rem;min-height:28px;padding:0 10px" @click="startEditTopic(item)">编辑</button>
-                  <button class="choice-btn" style="font-size:.75rem;min-height:28px;padding:0 10px;color:var(--danger)" @click="handleDeleteTopic(item.id)">删除</button>
-                  <button class="choice-btn" style="font-size:.75rem;min-height:28px;padding:0 10px" @click="viewTopic(item)">查看</button>
+                  <button class="choice-btn" style="font-size:.75rem;min-height:28px;padding:0 10px"
+                    @click="startEditTopic(item)">编辑</button>
+                  <button class="choice-btn" style="font-size:.75rem;min-height:28px;padding:0 10px;color:var(--danger)"
+                    @click="handleDeleteTopic(item.id)">删除</button>
+                  <button class="choice-btn" style="font-size:.75rem;min-height:28px;padding:0 10px"
+                    @click="viewTopic(item)">查看</button>
                 </div>
               </div>
             </template>
@@ -452,13 +551,80 @@ onMounted(() => { loadDocLibrary(); loadTopics() })
 </template>
 
 <style scoped>
-.research-doc-card { position: relative; }
-.research-doc-cover { position: relative; background: linear-gradient(135deg, var(--bg-soft), var(--primary-light)); display: flex; align-items: center; justify-content: center; color: var(--primary); }
-.research-check-badge { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 700; }
-.research-doc-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.research-doc-meta span { padding: 2px 8px; border-radius: var(--radius-full); background: var(--bg-soft); font-size: .72rem; color: var(--text-soft); }
-.research-form { display: grid; gap: 16px; }
-.research-form .profile-form-field label { display: block; font-size: .85rem; font-weight: 500; color: var(--text); margin-bottom: 6px; }
-.research-form input, .research-form textarea { width: 100%; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: .92rem; color: var(--text); background: var(--surface); outline: none; font-family: inherit; transition: border .2s, box-shadow .2s; }
-.research-form input:focus, .research-form textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(217,140,82,.12); }
+.research-doc-card {
+  position: relative;
+}
+
+.research-doc-cover {
+  position: relative;
+  background: linear-gradient(135deg, var(--bg-soft), var(--primary-light));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+.research-check-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+.research-doc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.research-doc-meta span {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--bg-soft);
+  font-size: .72rem;
+  color: var(--text-soft);
+}
+
+.research-form {
+  display: grid;
+  gap: 16px;
+}
+
+.research-form .profile-form-field label {
+  display: block;
+  font-size: .85rem;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.research-form input,
+.research-form textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: .92rem;
+  color: var(--text);
+  background: var(--surface);
+  outline: none;
+  font-family: inherit;
+  transition: border .2s, box-shadow .2s;
+}
+
+.research-form input:focus,
+.research-form textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(217, 140, 82, .12);
+}
 </style>

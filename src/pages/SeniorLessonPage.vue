@@ -1,3 +1,12 @@
+<!--
+  SeniorLessonPage.vue — 资深教师"智能语音备课"
+  ====================================================
+  功能要点：
+    1. 文本/语音两种输入方式（语音通过 useSpeechRecognition 复用）
+    2. 调用 AI 生成结构化教案，并允许切换编辑/预览
+    3. 草稿新增/编辑/删除（持久化逻辑封装在 useSeniorLessonStore）
+    4. 左侧栏与移动端底部均展示历史教案列表
+-->
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -7,8 +16,10 @@ import UiButton from '../components/ui/UiButton.vue'
 import { useSpeechRecognition } from '../composables/useSpeechRecognition'
 import { useSeniorLessonStore } from '../composables/useSeniorLessonStore'
 
+// 教案草稿 store：负责拉取、新增、更新、删除、构建空模板等
 const { drafts: savedDrafts, loading, generateLesson, buildDraftContent, addDraft, updateDraft, removeDraft } = useSeniorLessonStore()
 
+/* ==================== 页面静态配置 ==================== */
 const appName = '老年资深教师端'
 const pageTitle = '智能语音备课'
 const pageSubtitle = '输入教学需求，AI 自动生成结构化教案'
@@ -18,37 +29,48 @@ const navItems = [
   { name: '反思', path: '/senior/reflection', icon: '思' },
 ]
 
-const voiceInput = ref('')
-const generatedContent = ref('')
-const editableTitle = ref('')
-const editableContent = ref('')
-const isGenerating = ref(false)
-const generateStatus = ref('')
-const selectedId = ref(null)
-const viewMode = ref('edit')
+/* ==================== 状态变量 ==================== */
+const voiceInput = ref('')           // 用户输入（语音/文本）
+const generatedContent = ref('')     // AI 生成的原始内容
+const editableTitle = ref('')        // 当前教案标题
+const editableContent = ref('')      // 当前教案内容（可编辑）
+const isGenerating = ref(false)      // 是否正在生成
+const generateStatus = ref('')       // 生成状态文案
+const selectedId = ref(null)         // 当前选中的历史教案 ID
+const viewMode = ref('edit')         // 视图模式：edit | preview
 
+// 语音识别 composable
 const recognition = useSpeechRecognition()
 
+/** 监听实时识别结果：边录边写 */
 watch(() => recognition.liveText.value, (v) => {
   if (recognition.isListening.value && v) voiceInput.value = v
 })
 
+/** 顶部统计卡：教案总数 / 今日生成 / 最近编辑 */
 const derivedStats = computed(() => [
   { label: '教案总数', value: String(savedDrafts.value.length) },
   { label: '今日生成', value: '—' },
   { label: '最近编辑', value: savedDrafts.value[0]?.title?.slice(0, 6) || '—' },
 ])
 
+/** 当前选中的教案对象 */
 const selectedDraft = computed(() =>
   savedDrafts.value.find((d) => d.id === selectedId.value) ?? null
 )
 
+/** 切换语音录制状态：开始/停止 */
 function toggleMic() {
   if (recognition.isListening.value) { recognition.stop(); return }
   recognition.reset(voiceInput.value)
   recognition.start()
 }
 
+/**
+ * 调用 AI 生成教案
+ * - 成功时使用 result.markdown
+ * - 失败时降级为 buildDraftContent(输入) 模板
+ */
 async function handleGenerate() {
   if (!voiceInput.value.trim()) return
   isGenerating.value = true
@@ -70,6 +92,11 @@ async function handleGenerate() {
   }
 }
 
+/**
+ * 保存/更新教案
+ * - 若已选中历史教案则走 updateDraft
+ * - 否则走 addDraft 新增并自动选中新条目
+ */
 async function handleSave() {
   if (!editableContent.value.trim()) return
   try {
@@ -95,18 +122,21 @@ async function handleSave() {
   }
 }
 
+/** 选中历史教案：填充到编辑区 */
 function selectDraft(item) {
   selectedId.value = item.id
   editableTitle.value = item.title
   editableContent.value = item.content
 }
 
+/** 删除指定教案（若删除的是当前选中，则重置为新建态） */
 async function handleDelete(id) {
   await removeDraft(id)
   if (selectedId.value === id) newLesson()
   ElMessage.success('教案已删除')
 }
 
+/** 重置编辑区为新建态 */
 function newLesson() {
   selectedId.value = null
   editableTitle.value = ''
@@ -115,6 +145,12 @@ function newLesson() {
   voiceInput.value = ''
 }
 
+/**
+ * 简易 markdown 渲染：支持 #/##/### 标题、加粗、无序列表
+ * - 先转义 HTML 特殊字符
+ * - 替换标题、加粗、列表
+ * - 用空行分段
+ */
 function renderMd(md = '') {
   let html = md
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

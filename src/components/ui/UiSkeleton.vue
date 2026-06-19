@@ -1,12 +1,25 @@
+<!--
+  UiSkeleton.vue — 骨架屏占位
+  ====================================================
+  渲染可配置的占位形状（text/circle/rect/card），通过 count 控制行数，
+  可选 shimmer 动画。常用于数据加载时的占位渲染。
+-->
 <script setup>
 import { cn } from '@/lib/utils'
 
+// 组件属性定义
 const props = defineProps({
+  // 自定义类名
   class: String,
+  // 占位类型：text | circle | rect | card
   type: { type: String, default: 'text' },
+  // 宽度（非 circle 时生效）
   width: { type: String, default: '100%' },
+  // 高度（circle 时也作为直径）
   height: { type: String, default: '16px' },
+  // 是否启用 shimmer 动画
   animated: { type: Boolean, default: true },
+  // 渲染占位元素数量
   count: { type: Number, default: 1 },
 })
 </script>
