@@ -95,23 +95,15 @@ const questionDraft = ref('')     // 提问草稿
 const qaOpen = ref(false)         // 提问弹窗（保留以兼容旧模板）
 const loading = ref(false)        // 列表加载态
 
-<<<<<<< HEAD
 /* 上传视频 */
-const uploadOpen = ref(false)
-const uploadForm = ref({ title: '', summary: '', category: '课堂管理' })
-const uploadFileEl = ref(null)
-const uploading = ref(false)
-const uploadError = ref('')
 const uploadProgress = ref(0)
 const uploadStage = ref('')
-=======
 /* ==================== 上传视频 ==================== */
 const uploadOpen = ref(false)                                  // 上传弹窗显隐
 const uploadForm = ref({ title: '', summary: '', category: '课堂管理' }) // 上传表单
 const uploadFileEl = ref(null)                                // 文件 input 引用
 const uploading = ref(false)                                  // 上传中
 const uploadError = ref('')                                    // 上传错误提示
->>>>>>> cffdce0b3981f91c9ee230b0d2f7b4a90523b568
 
 const categoryOptions = ['课堂管理', '提问设计', '活动组织', '其他']
 
@@ -158,16 +150,10 @@ async function handleUpload() {
   }
 }
 
-<<<<<<< HEAD
-const editOpen = ref(false)
-const editingVideo = ref(null)
-const editForm = ref({ title: '', summary: '', category: '' })
-=======
 /* ==================== 编辑/删除视频 ==================== */
 const editOpen = ref(false)               // 编辑弹窗显隐
 const editingVideo = ref(null)            // 当前编辑的视频
 const editForm = ref({ title: '', summary: '', category: '' }) // 编辑表单
->>>>>>> cffdce0b3981f91c9ee230b0d2f7b4a90523b568
 
 /** 打开编辑弹窗并填充表单 */
 function openEdit(item) {
@@ -545,7 +531,6 @@ onMounted(() => { loadVideos() })
 </template>
 
 <style scoped>
-<<<<<<< HEAD
 .upload-form { display: grid; gap: 16px; }
 .upload-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .uf-field { display: grid; gap: 6px; }
@@ -565,121 +550,6 @@ onMounted(() => { loadVideos() })
 .upload-progress { display: grid; gap: 6px; padding: 4px 0; }
 .upload-error { color: var(--danger); font-size: .82rem; text-align: center; margin: 0; }
 @media (max-width: 640px) { .upload-form-grid { grid-template-columns: 1fr; } }
-=======
-.upload-form {
-  display: grid;
-  gap: 16px;
-}
-
-.upload-form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.uf-field {
-  display: grid;
-  gap: 6px;
-}
-
-.uf-field input,
-.uf-field textarea {
-  width: 100%;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-size: .9rem;
-  outline: none;
-  font-family: inherit;
-  transition: border .2s;
-}
-
-.uf-field input:focus,
-.uf-field textarea:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(217, 140, 82, .1);
-}
-
-.uf-field textarea {
-  resize: vertical;
-}
-
-.required {
-  color: var(--danger);
-}
-
-.category-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.cat-pill {
-  padding: 8px 14px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-full);
-  background: var(--surface);
-  font-size: .82rem;
-  cursor: pointer;
-  transition: all .2s;
-  color: var(--text-soft);
-}
-
-.cat-pill:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.cat-pill.active {
-  background: var(--primary);
-  color: #fff;
-  border-color: var(--primary);
-}
-
-.file-drop-zone {
-  border: 2px dashed var(--border);
-  border-radius: var(--radius-lg);
-  padding: 28px;
-  text-align: center;
-  cursor: pointer;
-  transition: all .2s;
-  background: var(--bg-soft);
-}
-
-.file-drop-zone:hover {
-  border-color: var(--primary);
-  background: var(--primary-light);
-}
-
-.file-drop-icon {
-  font-size: 2rem;
-  margin-bottom: 8px;
-}
-
-.file-drop-zone p {
-  font-size: .88rem;
-  color: var(--text);
-  margin: 0 0 4px;
-}
-
-.file-drop-zone small {
-  font-size: .75rem;
-  color: var(--text-faint);
-}
-
-.upload-error {
-  color: var(--danger);
-  font-size: .82rem;
-  text-align: center;
-  margin: 0;
-}
-
-@media (max-width: 640px) {
-  .upload-form-grid {
-    grid-template-columns: 1fr;
-  }
-}
->>>>>>> cffdce0b3981f91c9ee230b0d2f7b4a90523b568
 
 /* 移动端适配 */
 @media (max-width: 768px) {

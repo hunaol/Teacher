@@ -1,78 +1,116 @@
 /**
- * deepseek.js — AI 对话能力封装
- * ====================================================
- * 对接 OpenAI 兼容的大模型 Chat API（当前配置为阿里云千问 qwen-plus）。
- * 负责：
- *   1. 维护 API Key 与 baseURL
- *   2. 构造 system prompt（基于乡村教学场景和教师风格）
- *   3. 调用 chat/completions 接口并返回模型回复
- *
- * 注意：如需切换到 DeepSeek，只需修改 API_BASE 与 model 字段即可。
+ * AI 对话 API。
+ * 模型密钥仅保存在后端；前端通过 fetch 读取 SSE 流并逐段回调。
  */
 
-// 模型服务的 OpenAI 兼容 API baseURL（当前：阿里云百炼）
-const API_BASE = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+import { TOKEN_KEY } from './client.js'
 
-/* 在此填入你的 API Key（千问/DashScope 的 Key） */
-const API_KEY = 'sk-ws-H.RPMHEEH.oqJ7.MEUCIHgG8yGgkzx1EmfWJ6xbfgFoF_pM-J2rdAWWMc3DlxfNAiEAj8ukyzLImC95d_YEglt9-UlDO7pWAwpCBrVfq2iOZMY'
+const STREAM_URL = '/api/ai/avatar/chat/stream'
+const TEACHER_TYPES = ['senior', 'mid', 'novice']
 
-/**
- * 检查是否已配置 API Key
- * @returns {boolean} true 表示已配置，false 表示未配置
- */
-export function hasApiKey() {
-  return API_KEY.length > 0
+function currentTeacherType() {
+  const hash = window.location.hash || ''
+  const path = (hash.startsWith('#') ? hash.slice(1) : hash).split('?')[0]
+  const prefix = path.split('/')[1]
+  return TEACHER_TYPES.includes(prefix) ? prefix : ''
+}
+
+function requestHeaders() {
+  const headers = { 'Content-Type': 'application/json', Accept: 'text/event-stream' }
+  const token = localStorage.getItem(TOKEN_KEY)
+  const teacherType = currentTeacherType()
+  if (token) headers.Authorization = `Bearer ${token}`
+  if (teacherType) headers['X-Teacher-Type'] = teacherType
+  return headers
+}
+
+async function responseError(response) {
+  const body = await response.json().catch(() => null)
+  if (response.status === 401) {
+    localStorage.removeItem(TOKEN_KEY)
+    window.location.hash = '#/'
+  }
+  return new Error(body?.message || `请求失败 (${response.status})`)
+}
+
+function handleEvent(block, onChunk) {
+  let event = 'message'
+  const dataLines = []
+
+  for (const line of block.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim()
+    if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
+  }
+  if (!dataLines.length) return
+
+  let data = {}
+  try {
+    data = JSON.parse(dataLines.join('\n'))
+  } catch {
+    throw new Error('后端返回了无法解析的流式数据')
+  }
+
+  if (event === 'delta' && data.content) onChunk(data.content)
+  if (event === 'error') throw new Error(data.message || 'AI 回答生成失败')
+}
+
+async function consumeSse(body, onChunk) {
+  const reader = body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+      buffer = buffer.replace(/\r\n/g, '\n')
+
+      let boundary = buffer.indexOf('\n\n')
+      while (boundary !== -1) {
+        const block = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + 2)
+        if (block.trim()) handleEvent(block, onChunk)
+        boundary = buffer.indexOf('\n\n')
+      }
+
+      if (done) break
+    }
+    if (buffer.trim()) handleEvent(buffer, onChunk)
+  } finally {
+    reader.releaseLock()
+  }
 }
 
 /**
- * 与模型进行单轮对话（支持传入历史消息）
- * @param {Object} options
- * @param {string} options.prompt - 用户当前输入的提示
- * @param {string} options.style - 教师当前选择的教学风格
- * @param {Array<{role: string, content: string}>} [options.history] - 历史消息
- * @returns {Promise<string>} 模型的回复内容
+ * 流式对话。每收到一段模型文本就调用一次 onChunk。
  */
-export async function chat({ prompt, style, history = [] }) {
-  if (!API_KEY) throw new Error('API Key 未配置，请在 src/api/deepseek.js 中填入')
-
-  // 系统提示词：定义助手角色与回答风格
-  const systemPrompt = `你是乡村数学教学智能助手，服务对象是乡村学校中年骨干教师。
-你的任务是根据教师的教学问题，提供可直接用于课堂的讲解建议、互动方案和教学策略。
-回答要求：
-- 语言简洁亲切，像经验丰富的同事在交流
-- 结合乡村教学实际场景
-- 给出具体可操作的建议，不要空泛理论
-- 当前教师选择的教学风格是：${style}，请据此调整回答的语气和侧重点`
-
-  // 构造 messages：system + 历史（角色归一） + 当前 user
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...history.map((m) => ({ role: m.role === 'ai' ? 'assistant' : m.role, content: m.content })),
-    { role: 'user', content: prompt },
-  ]
-
-  // 调用兼容 OpenAI 的 chat completions 接口
-  const res = await fetch(`${API_BASE}/chat/completions`, {
+export async function chatStream({ prompt, style, history = [], onChunk = () => {}, signal }) {
+  const response = await fetch(STREAM_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'qwen-plus', // 千问模型；如切回 deepseek 可改为 'deepseek-chat'
-      messages,
-      temperature: 0.8,
-      max_tokens: 2048,
-    }),
+    headers: requestHeaders(),
+    body: JSON.stringify({ prompt, style, history }),
+    signal,
   })
 
-  // 错误处理：尝试解析后端返回的错误信息
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error?.message || `请求失败 (${res.status})`)
-  }
+  if (!response.ok) throw await responseError(response)
+  if (!response.body) throw new Error('当前浏览器不支持流式响应')
 
-  // 解析响应数据，兼容空 choices
-  const data = await res.json()
-  return data.choices?.[0]?.message?.content || '（未获取到回复）'
+  await consumeSse(response.body, onChunk)
+}
+
+/**
+ * 非流式兼容入口，供现有页面继续使用。
+ */
+export async function chat(options) {
+  let reply = ''
+  await chatStream({
+    ...options,
+    onChunk: (chunk) => { reply += chunk },
+  })
+  return reply || '（未获取到回复）'
+}
+
+// API Key 是否可用由后端在请求时校验；保留此函数兼容旧调用方。
+export function hasApiKey() {
+  return true
 }

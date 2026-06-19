@@ -13,7 +13,7 @@ import SoloAppShell from '../components/SoloAppShell.vue'
 import waitImg from '../assets/img/wait.png'
 import thinkImg from '../assets/img/think.png'
 import replyImg from '../assets/img/reply.png'
-import { chat } from '../api/deepseek'
+import { chatStream } from '../api/deepseek'
 
 const appName = '中年骨干教师端'
 const pageTitle = '智能数字人'
@@ -62,12 +62,6 @@ function switchStyle(s) {
   nextTick(() => { const el = messagesRef.value; if (el) el.scrollTop = el.scrollHeight })
 }
 
-/* 向当前风格的消息列表追加一条消息 */
-function addMsg(msg) {
-  if (!allMessages.value[activeStyle.value]) allMessages.value[activeStyle.value] = []
-  allMessages.value[activeStyle.value].push(msg)
-}
-
 // 顶部统计卡片：当前风格 / 用户提问次数 / 数字人状态
 const derivedStats = computed(() => [
   { label: '教学风格', value: activeStyle.value.slice(0, 4) },
@@ -81,36 +75,49 @@ const derivedStats = computed(() => [
  * 1. 校验输入与发送状态
  * 2. 追加用户消息到当前风格
  * 3. 切换数字人状态为思考
- * 4. 调用 chat 接口
- * 5. 追加 AI 回复并恢复待机
+ * 4. 调用流式接口并增量更新 AI 消息
+ * 5. 流结束后恢复待机
  */
 async function handleSend() {
   const text = inputText.value.trim()
   if (!text || sending.value) return
 
-  addMsg({ role: 'user', content: text, time: Date.now() })
+  const style = activeStyle.value
+  if (!allMessages.value[style]) allMessages.value[style] = []
+  const conversation = allMessages.value[style]
+  conversation.push({ role: 'user', content: text, time: Date.now() })
   inputText.value = ''
   sending.value = true
   avatarStatus.value = 'thinking'
 
   // 历史消息（不含刚刚加入的 user 消息）
-  const history = (allMessages.value[activeStyle.value] || []).slice(0, -1)
+  const history = conversation.slice(0, -1)
+  conversation.push({ role: 'ai', content: '', time: Date.now(), streaming: true })
+  const aiMessage = conversation[conversation.length - 1]
+  await nextTick()
+  scrollToBottom()
+
   try {
-    const reply = await chat({
+    await chatStream({
       prompt: text,
-      style: activeStyle.value,
+      style,
       history: history.map((m) => ({ role: m.role, content: m.content })),
+      onChunk: (chunk) => {
+        aiMessage.content += chunk
+        avatarStatus.value = 'speaking'
+        if (activeStyle.value === style) nextTick(scrollToBottom)
+      },
     })
-    addMsg({ role: 'ai', content: reply, time: Date.now() })
-    avatarStatus.value = 'speaking'
-    setTimeout(() => { avatarStatus.value = 'idle' }, 3000)
+    if (!aiMessage.content) aiMessage.content = '（未获取到回复）'
   } catch (err) {
-    addMsg({ role: 'ai', content: `出错了：${err.message}`, time: Date.now() })
-    avatarStatus.value = 'idle'
+    const prefix = aiMessage.content ? '\n\n回答中断：' : '出错了：'
+    aiMessage.content += `${prefix}${err.message}`
   } finally {
+    aiMessage.streaming = false
     sending.value = false
+    avatarStatus.value = 'idle'
     await nextTick()
-    scrollToBottom()
+    if (activeStyle.value === style) scrollToBottom()
   }
 }
 
@@ -226,18 +233,15 @@ function scrollToBottom() {
                 {{ msg.role === 'user' ? '师' : 'AI' }}
               </div>
               <div class="msg-body">
-                <div class="msg-bubble">{{ msg.content }}</div>
-              </div>
-            </div>
-
-            <!-- 发送中指示 -->
-            <div v-if="sending" class="chat-message msg-ai">
-              <div class="msg-avatar">AI</div>
-              <div class="msg-body">
-                <div class="msg-bubble msg-typing">
-                  <span class="typing-dot"></span>
-                  <span class="typing-dot"></span>
-                  <span class="typing-dot"></span>
+                <div class="msg-bubble" :class="{ 'msg-typing': msg.streaming && !msg.content }">
+                  <template v-if="msg.streaming && !msg.content">
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                  </template>
+                  <template v-else>
+                    {{ msg.content }}<span v-if="msg.streaming" class="stream-cursor"></span>
+                  </template>
                 </div>
               </div>
             </div>
@@ -254,7 +258,7 @@ function scrollToBottom() {
             @keydown.enter.exact.prevent="handleSend"
           ></textarea>
           <div class="bottom-action-bar">
-            <button class="choice-btn" @click="clearChat" :disabled="!messages.length">
+            <button class="choice-btn" @click="clearChat" :disabled="!messages.length || sending">
               <Trash2 :size="14" />
               清空对话
             </button>
@@ -389,10 +393,20 @@ function scrollToBottom() {
 .typing-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); animation: typingBounce 1.2s ease-in-out infinite; }
 .typing-dot:nth-child(2) { animation-delay: .15s; }
 .typing-dot:nth-child(3) { animation-delay: .3s; }
+.stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -2px;
+  background: currentColor;
+  animation: streamBlink .8s steps(1) infinite;
+}
 @keyframes typingBounce {
   0%, 60%, 100% { transform: translateY(0); opacity: .4; }
   30% { transform: translateY(-6px); opacity: 1; }
 }
+@keyframes streamBlink { 50% { opacity: 0; } }
 
 /* 输入区 */
 .input-card { flex-shrink: 0; }
